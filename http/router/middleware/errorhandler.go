@@ -112,7 +112,7 @@ func (handler *Errorhandler) getStatusCode(err error) int {
 
 	// Check error categories
 	for _, category := range handler.categories {
-		if errIsInCategory(err, category) {
+		if category.Matches(err) {
 			return category.StatusCode
 		}
 	}
@@ -121,10 +121,3 @@ func (handler *Errorhandler) getStatusCode(err error) int {
 	return http.StatusInternalServerError
 }
 
-// errIsInCategory checks if an error belongs to a specific category.
-func errIsInCategory(err error, category *ErrorCategory) bool {
-	if category.Matches(err) {
-		return true
-	}
-	return false
-}

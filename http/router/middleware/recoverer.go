@@ -16,6 +16,18 @@ type Recoverer struct {
 	logger *slog.Logger
 }
 
+func NewRecoverer(
+	next http.Handler,
+	ctx context.Context,
+	logger *slog.Logger,
+) *Recoverer {
+	return &Recoverer{
+		next:   next,
+		ctx:    ctx,
+		logger: logger,
+	}
+}
+
 func (recoverer *Recoverer) ServeHTTP(rw http.ResponseWriter, rq *http.Request) {
 	defer func() {
 		if rvr := recover(); rvr != nil {
