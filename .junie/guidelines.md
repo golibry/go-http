@@ -12,9 +12,9 @@ The goal of this project is to provide developers with common functionalities re
 ## Step-by-Step Development Process
 1. **Understand**: Analyze the requirement and identify affected components
 2. **Plan**: Design the solution considering middleware patterns and error handling
-3. **Implement**: Write code following established patterns (see Code Patterns section)
+3. **Implement**: Write code following established patterns (see the Code Patterns section)
 4. **Test**: Create comprehensive tests using testify suite
-5. **Validate**: Ensure integration with existing middleware chain works correctly
+5. **Validate**: Ensure integration with the existing middleware chain works correctly
 
 ## Core Principles
 - **Iterative Approach**: Develop incrementally with frequent validation
@@ -22,6 +22,8 @@ The goal of this project is to provide developers with common functionalities re
 - **Evidence-Based**: All decisions must be testable and measurable
 - **Context Awareness**: Maintain understanding of the entire middleware chain
 - **Structured Execution**: Always plan before implementing
+- **Maintenance costs**: Add enough code that justifies the return on investment (more lines = 
+  more maintenance costs)
 
 # Code Patterns
 
