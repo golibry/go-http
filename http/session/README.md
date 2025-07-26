@@ -26,6 +26,7 @@ import (
     "os"
     
     "github.com/golibry/go-http/http/session"
+    "github.com/golibry/go-http/http/router/middleware"
 )
 
 func main() {
@@ -44,7 +45,7 @@ func main() {
     // Create middleware
     handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         // Get or create session
-        sess, err := session.GetOrCreateSession(r.Context(), w, r, manager)
+        sess, err := middleware.GetOrCreateSession(r.Context(), w, r, manager)
         if err != nil {
             http.Error(w, "Session error", http.StatusInternalServerError)
             return
@@ -57,9 +58,9 @@ func main() {
         w.WriteHeader(http.StatusOK)
     })
     
-    middleware := session.NewSessionMiddleware(handler, ctx, logger, manager)
+    sessionMiddleware := middleware.NewSessionMiddleware(handler, ctx, logger, manager)
     
-    http.Handle("/", middleware)
+    http.Handle("/", sessionMiddleware)
     http.ListenAndServe(":8080", nil)
 }
 ```
@@ -285,10 +286,15 @@ func (rs *RedisStorage) Exists(ctx context.Context, sessionID string) bool {
 The session middleware automatically handles session lifecycle:
 
 ```go
+import (
+    "github.com/golibry/go-http/http/router/middleware"
+    "github.com/golibry/go-http/http/session"
+)
+
 // Create your handler
 handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     // Session is automatically available in context
-    if sess, ok := session.GetSessionFromContext(r.Context()); ok {
+    if sess, ok := middleware.GetSessionFromContext(r.Context()); ok {
         // Use session
         sess.Set("page_views", getPageViews(sess) + 1)
     }
@@ -297,7 +303,7 @@ handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 })
 
 // Wrap with session middleware
-sessionMiddleware := session.NewSessionMiddleware(handler, ctx, logger, manager)
+sessionMiddleware := middleware.NewSessionMiddleware(handler, ctx, logger, manager)
 
 // Use in your HTTP server
 http.Handle("/", sessionMiddleware)

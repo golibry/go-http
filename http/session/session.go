@@ -84,7 +84,7 @@ type Session interface {
 	Destroy(ctx context.Context) error
 }
 
-// Manager handles session lifecycle
+// Manager handles the session lifecycle
 type Manager interface {
 	// NewSession creates a new session
 	NewSession(ctx context.Context, w http.ResponseWriter, r *http.Request) (Session, error)
@@ -133,7 +133,7 @@ type ManagerImpl struct {
 	ctx        context.Context
 }
 
-// Options configures session behavior
+// Options to configure session behavior
 type Options struct {
 	// Cookie settings
 	CookieName     string
@@ -200,6 +200,7 @@ func (m *ManagerImpl) generateSessionID() (string, error) {
 func (m *ManagerImpl) NewSession(
 	ctx context.Context,
 	w http.ResponseWriter,
+	_ *http.Request,
 ) (Session, error) {
 	sessionID, err := m.generateSessionID()
 	if err != nil {
@@ -275,7 +276,7 @@ func (m *ManagerImpl) GetSession(ctx context.Context, r *http.Request) (Session,
 		return nil, ErrInvalidSession
 	}
 
-	// Check if session is expired
+	// Check if the session is expired
 	session := &sessionImpl{
 		data:    &sessionData,
 		storage: m.storage,
@@ -527,7 +528,7 @@ func (s *sessionImpl) IsExpired(maxAge time.Duration) bool {
 	return time.Since(s.data.CreatedAt) > maxAge
 }
 
-// isIdleExpired checks if session is idle expired
+// isIdleExpired checks if the session is idle expired
 func (s *sessionImpl) isIdleExpired(idleTimeout time.Duration) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -583,83 +584,6 @@ func (s *sessionImpl) Destroy(ctx context.Context) error {
 	return nil
 }
 
-// SessionMiddleware provides session handling middleware
-type SessionMiddleware struct {
-	next    http.Handler
-	ctx     context.Context
-	logger  *slog.Logger
-	manager Manager
-}
-
-// NewSessionMiddleware creates a new session middleware
-func NewSessionMiddleware(
-	next http.Handler,
-	ctx context.Context,
-	logger *slog.Logger,
-	manager Manager,
-) *SessionMiddleware {
-	return &SessionMiddleware{
-		next:    next,
-		ctx:     ctx,
-		logger:  logger,
-		manager: manager,
-	}
-}
-
-// ServeHTTP implements the middleware logic
-func (sm *SessionMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Try to get existing session
-	session, err := sm.manager.GetSession(sm.ctx, r)
-	if err != nil && errors.Is(err, ErrSessionNotFound) {
-		if sm.logger != nil {
-			sm.logger.ErrorContext(sm.ctx, "Failed to get session", "error", err)
-		}
-	}
-
-	// Add session to request context
-	ctx := context.WithValue(r.Context(), sessionContextKey, session)
-	r = r.WithContext(ctx)
-
-	sm.next.ServeHTTP(w, r)
-
-	// Save session if it exists and is dirty
-	if session != nil {
-		if err := session.Save(sm.ctx); err != nil && sm.logger != nil {
-			sm.logger.ErrorContext(sm.ctx, "Failed to save session", "error", err)
-		}
-	}
-}
-
-const sessionContextKey string = "session"
-
-// GetSessionFromContext retrieves session from request context
-func GetSessionFromContext(ctx context.Context) (Session, bool) {
-	session, ok := ctx.Value(sessionContextKey).(Session)
-	return session, ok
-}
-
-// GetOrCreateSession gets an existing session or creates a new one
-func GetOrCreateSession(
-	ctx context.Context,
-	w http.ResponseWriter,
-	r *http.Request,
-	manager Manager,
-) (Session, error) {
-	// Try to get the existing session from context first
-	if session, ok := GetSessionFromContext(ctx); ok && session != nil {
-		return session, nil
-	}
-
-	// Try to get an existing session from request
-	session, err := manager.GetSession(ctx, r)
-	if err == nil {
-		return session, nil
-	}
-
-	// Create a new session if none exists
-	return manager.NewSession(ctx, w, r)
-}
-
 // MemoryStorage provides in-memory session storage
 type MemoryStorage struct {
 	sessions map[string]*memorySession
@@ -679,7 +603,7 @@ func NewMemoryStorage() *MemoryStorage {
 }
 
 // Get retrieves session data by ID
-func (ms *MemoryStorage) Get(ctx context.Context, sessionID string) ([]byte, error) {
+func (ms *MemoryStorage) Get(_ context.Context, sessionID string) ([]byte, error) {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 
@@ -698,7 +622,7 @@ func (ms *MemoryStorage) Get(ctx context.Context, sessionID string) ([]byte, err
 
 // Set stores session data with expiration
 func (ms *MemoryStorage) Set(
-	ctx context.Context,
+	_ context.Context,
 	sessionID string,
 	data []byte,
 	expiration time.Duration,
@@ -715,7 +639,7 @@ func (ms *MemoryStorage) Set(
 }
 
 // Delete removes session data
-func (ms *MemoryStorage) Delete(ctx context.Context, sessionID string) error {
+func (ms *MemoryStorage) Delete(_ context.Context, sessionID string) error {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
@@ -724,7 +648,7 @@ func (ms *MemoryStorage) Delete(ctx context.Context, sessionID string) error {
 }
 
 // Cleanup removes expired sessions
-func (ms *MemoryStorage) Cleanup(ctx context.Context) error {
+func (ms *MemoryStorage) Cleanup(_ context.Context) error {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
@@ -739,7 +663,7 @@ func (ms *MemoryStorage) Cleanup(ctx context.Context) error {
 }
 
 // Exists checks if session exists
-func (ms *MemoryStorage) Exists(ctx context.Context, sessionID string) bool {
+func (ms *MemoryStorage) Exists(_ context.Context, sessionID string) bool {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 
