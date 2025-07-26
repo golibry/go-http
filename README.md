@@ -11,6 +11,7 @@ Migrated from https://github.com/rsgcata/go-http
 - **Access Logger**: Structured HTTP access logging with configurable options
 - **Error Handler**: Sophisticated error handling with HTTP status code mapping
 - **Recoverer**: Panic recovery middleware with structured logging
+- **Session Management**: Comprehensive session handling with attributes, flash messages, and encryption
 
 ## Installation
 
@@ -175,6 +176,13 @@ func setupRecoverer() http.Handler {
     return recoverer
 }
 ```
+
+### Session Management
+
+Comprehensive session management with support for attributes, flash messages, encryption, and automatic garbage collection.
+
+For detailed documentation including configuration options, security considerations, custom storage implementations, and complete examples, see the [Session Management Documentation](http/session/README.md).
+
 
 ## Middleware Chaining
 
