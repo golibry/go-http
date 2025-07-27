@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"github.com/stretchr/testify/suite"
 	"net/http"
 	"net/http/httptest"
@@ -50,7 +49,7 @@ func (suite *PathNormalizerSuite) TestItCanNormalizePathWithSpaces() {
 					},
 				)
 
-				middleware := NewPathNormalizer(testHandler, context.Background())
+				middleware := NewPathNormalizer(testHandler)
 				request := httptest.NewRequest("GET", "http://example.com/", nil)
 				request.URL.Path = tc.inputPath
 				recorder := httptest.NewRecorder()
@@ -102,7 +101,7 @@ func (suite *PathNormalizerSuite) TestItCanNormalizePathWithMultipleSlashes() {
 					},
 				)
 
-				middleware := NewPathNormalizer(testHandler, context.Background())
+				middleware := NewPathNormalizer(testHandler)
 				request := httptest.NewRequest("GET", "http://example.com"+tc.inputPath, nil)
 				recorder := httptest.NewRecorder()
 
@@ -153,7 +152,7 @@ func (suite *PathNormalizerSuite) TestItCanHandleEdgeCases() {
 					},
 				)
 
-				middleware := NewPathNormalizer(testHandler, context.Background())
+				middleware := NewPathNormalizer(testHandler)
 				request := httptest.NewRequest("GET", "http://example.com/", nil)
 				request.URL.Path = tc.inputPath
 				recorder := httptest.NewRecorder()
@@ -184,7 +183,7 @@ func (suite *PathNormalizerSuite) TestItCanChainWithOtherMiddleware() {
 	)
 
 	// Chain PathNormalizer with the header middleware
-	pathNormalizer := NewPathNormalizer(headerMiddleware, context.Background())
+	pathNormalizer := NewPathNormalizer(headerMiddleware)
 
 	inputPath := "/api //v1/// users"
 	expectedPath := "/api/v1/users"

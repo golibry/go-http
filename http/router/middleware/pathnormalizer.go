@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"net/http"
 	"strings"
 )
@@ -9,17 +8,12 @@ import (
 // PathNormalizer middleware strips empty spaces and trailing extra slashes from the URL path
 type PathNormalizer struct {
 	next http.Handler
-	ctx  context.Context
 }
 
 // NewPathNormalizer creates new PathNormalizer middleware
-func NewPathNormalizer(
-	next http.Handler,
-	ctx context.Context,
-) *PathNormalizer {
+func NewPathNormalizer(next http.Handler) *PathNormalizer {
 	return &PathNormalizer{
 		next: next,
-		ctx:  ctx,
 	}
 }
 

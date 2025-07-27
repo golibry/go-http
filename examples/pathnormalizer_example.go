@@ -1,21 +1,13 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
-	"os"
 
 	"github.com/golibry/go-http/http/router/middleware"
 )
 
 func main() {
-	// Create a logger for demonstration
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
-
 	// Create a simple handler that shows the received path
 	finalHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Received path: %s\n", r.URL.Path)
@@ -23,11 +15,7 @@ func main() {
 	})
 
 	// Create the PathNormalizer middleware
-	pathNormalizer := middleware.NewPathNormalizer(
-		finalHandler,
-		context.Background(),
-		logger,
-	)
+	pathNormalizer := middleware.NewPathNormalizer(finalHandler)
 
 	// Create a test server
 	server := &http.Server{
