@@ -34,11 +34,7 @@ func (suite *RecovererSuite) TestNoRecoveryNeeded() {
 	)
 
 	// Create a recoverer with handler
-	chain := &Recoverer{
-		ctx:    context.Background(),
-		logger: nil,
-		next:   handler,
-	}
+	chain := NewRecoverer(handler, context.Background(), nil)
 
 	// Execute
 	chain.ServeHTTP(recorder, request)
@@ -63,11 +59,7 @@ func (suite *RecovererSuite) TestRecoverFromStringPanic() {
 	)
 
 	// Create a recoverer with handler
-	chain := &Recoverer{
-		ctx:    context.Background(),
-		logger: logger,
-		next:   handler,
-	}
+	chain := NewRecoverer(handler, context.Background(), logger)
 
 	// Execute
 	chain.ServeHTTP(recorder, request)
@@ -100,11 +92,7 @@ func (suite *RecovererSuite) TestRecoverFromErrorPanic() {
 	)
 
 	// Create a recoverer with handler
-	chain := &Recoverer{
-		ctx:    context.Background(),
-		logger: logger,
-		next:   handler,
-	}
+	chain := NewRecoverer(handler, context.Background(), logger)
 
 	// Execute
 	chain.ServeHTTP(recorder, request)
@@ -137,11 +125,7 @@ func (suite *RecovererSuite) TestRecoverFromOtherPanic() {
 	)
 
 	// Create a recoverer with handler
-	chain := &Recoverer{
-		ctx:    context.Background(),
-		logger: logger,
-		next:   handler,
-	}
+	chain := NewRecoverer(handler, context.Background(), logger)
 
 	// Execute
 	chain.ServeHTTP(recorder, request)
@@ -168,11 +152,7 @@ func (suite *RecovererSuite) TestRecoverWithoutLogger() {
 	)
 
 	// Create a recoverer with handler
-	chain := &Recoverer{
-		ctx:    context.Background(),
-		logger: nil,
-		next:   handler,
-	}
+	chain := NewRecoverer(handler, context.Background(), nil)
 
 	// Execute
 	chain.ServeHTTP(recorder, request)

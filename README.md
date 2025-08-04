@@ -9,7 +9,6 @@ Migrated from https://github.com/rsgcata/go-http
 
 - **Response Writer**: Enhanced HTTP response writer with status code tracking
 - **Access Logger**: Structured HTTP access logging with configurable options
-- **Error Handler**: Sophisticated error handling with HTTP status code mapping
 - **Recoverer**: Panic recovery middleware with structured logging
 - **Session Management**: Comprehensive session handling with attributes, flash messages, and encryption
 
@@ -40,6 +39,148 @@ func handler(w http.ResponseWriter, r *http.Request) {
     statusCode := rw.StatusCode() // Returns 201
 }
 ```
+
+### Response Builder
+
+The `ResponseBuilder` provides a fluent API for constructing HTTP responses with support for JSON, Text, HTML, and structured error responses.
+
+#### JSON Responses
+
+```go
+import httplib "github.com/golibry/go-http/http"
+
+func jsonHandler(w http.ResponseWriter, r *http.Request) {
+    data := map[string]interface{}{
+        "message": "Hello, World!",
+        "status":  "success",
+        "data":    []string{"item1", "item2", "item3"},
+    }
+
+    err := httplib.NewResponseBuilder(w).
+        Status(http.StatusCreated).
+        Header("X-API-Version", "v1.0").
+        Header("X-Request-ID", "12345").
+        JSON().
+        Data(data).
+        Send()
+
+    if err != nil {
+        // Handle error
+        log.Printf("Error sending JSON response: %v", err)
+    }
+}
+```
+
+#### Text Responses
+
+```go
+func textHandler(w http.ResponseWriter, r *http.Request) {
+    err := httplib.NewResponseBuilder(w).
+        Status(http.StatusOK).
+        Header("X-Custom-Header", "custom-value").
+        Text().
+        ContentString("This is a plain text response").
+        Send()
+
+    if err != nil {
+        log.Printf("Error sending text response: %v", err)
+    }
+}
+```
+
+#### HTML Responses
+
+```go
+func htmlHandler(w http.ResponseWriter, r *http.Request) {
+    htmlContent := `<!DOCTYPE html>
+<html>
+<head><title>Example</title></head>
+<body><h1>Hello from Response Builder!</h1></body>
+</html>`
+
+    err := httplib.NewResponseBuilder(w).
+        Status(http.StatusOK).
+        HTML().
+        ContentString(htmlContent).
+        Send()
+
+    if err != nil {
+        log.Printf("Error sending HTML response: %v", err)
+    }
+}
+```
+
+#### Error Responses
+
+The ResponseBuilder provides sophisticated error handling with automatic status code detection, structured logging, and flexible error categorization.
+
+```go
+import (
+    "context"
+    "errors"
+    "log/slog"
+    "net/http"
+    httplib "github.com/golibry/go-http/http"
+)
+
+// Custom error type implementing HTTPError interface
+type ValidationError struct {
+    Field string
+}
+
+func (e ValidationError) Error() string {
+    return fmt.Sprintf("validation failed for field: %s", e.Field)
+}
+
+func (e ValidationError) StatusCode() int {
+    return http.StatusBadRequest
+}
+
+func errorHandler(w http.ResponseWriter, r *http.Request) {
+    logger := slog.Default()
+    ctx := context.Background()
+    
+    // Setup error categories
+    validationCategory := httplib.NewErrorCategory(http.StatusBadRequest)
+    httplib.AddErrorType[ValidationError](validationCategory)
+    
+    // Example 1: Simple error response
+    err := httplib.NewResponseBuilder(w).
+        Status(http.StatusBadRequest).
+        Error().
+        WithError(errors.New("validation failed")).
+        Send()
+
+    // Example 2: JSON error response with logging
+    err = httplib.NewResponseBuilder(w).
+        Error().
+        WithError(ValidationError{Field: "email"}).
+        WithLogger(logger).
+        WithContext(ctx).
+        AddErrorCategory(validationCategory).
+        AsJSON().
+        Send()
+
+    // Example 3: Custom message error response
+    err = httplib.NewResponseBuilder(w).
+        Status(http.StatusNotFound).
+        Error().
+        WithMessage("The requested resource was not found").
+        AsJSON().
+        Send()
+
+    if err != nil {
+        log.Printf("Error sending error response: %v", err)
+    }
+}
+```
+
+**Error Response Features:**
+- **Automatic Status Code Detection**: Errors implementing `HTTPError` interface automatically set the correct status code
+- **Error Categories**: Flexible error classification using `ErrorCategory` for grouping errors by status code
+- **Structured Logging**: Integration with `slog.Logger` for comprehensive error tracking
+- **Context Support**: Request context preservation for observability
+- **Multiple Formats**: Support for both text and JSON error responses
 
 ### Access Logger Middleware
 
@@ -82,68 +223,6 @@ func setupAccessLogger() http.Handler {
 - Request duration
 - Client IP (optional)
 
-### Error Handler Middleware
-
-Error handling with HTTP status code mapping and structured logging.
-
-```go
-import (
-    "context"
-    "errors"
-    "log/slog"
-    "net/http"
-    "github.com/golibry/go-http/http/router/middleware"
-)
-
-// Define custom error types
-type ValidationError struct {
-    Message string
-}
-
-func (e ValidationError) Error() string {
-    return e.Message
-}
-
-// Implement HTTPError interface for custom status codes
-func (e ValidationError) StatusCode() int {
-    return http.StatusBadRequest
-}
-
-// Define a custom handler that returns errors
-func myHandler(w http.ResponseWriter, r *http.Request) error {
-    if r.URL.Path == "/error" {
-        return ValidationError{Message: "Invalid input"}
-    }
-    
-    w.WriteHeader(http.StatusOK)
-    w.Write([]byte("Success"))
-    return nil
-}
-
-func setupErrorHandler() http.Handler {
-    logger := slog.Default()
-    ctx := context.Background()
-    
-    // Create error categories for grouping errors by status code
-    badRequestCategory := middleware.NewErrorCategory(http.StatusBadRequest)
-    badRequestCategory.AddSentinelError(errors.New("validation failed"))
-    
-    notFoundCategory := middleware.NewErrorCategory(http.StatusNotFound)
-    middleware.AddErrorType[*ValidationError](notFoundCategory)
-    
-    categories := []*middleware.ErrorCategory{
-        badRequestCategory,
-        notFoundCategory,
-    }
-    
-    return middleware.NewErrorhandler(myHandler, ctx, logger, categories)
-}
-```
-
-**Error Classification:**
-1. **HTTPError Interface**: Errors implementing `StatusCode() int` method
-2. **Error Categories**: Group errors by status code using sentinel errors or error types
-3. **Default**: Falls back to 500 Internal Server Error
 
 ### Recoverer Middleware
 
@@ -233,12 +312,14 @@ func (e NotFoundError) StatusCode() int {
 ### Error Categories
 
 ```go
+import httplib "github.com/golibry/go-http/http"
+
 // Create categories for different error types
-validationCategory := middleware.NewErrorCategory(http.StatusBadRequest)
+validationCategory := httplib.NewErrorCategory(http.StatusBadRequest)
 validationCategory.AddSentinelError(errors.New("validation error"))
 
-authCategory := middleware.NewErrorCategory(http.StatusUnauthorized)
-middleware.AddErrorType[*AuthError](authCategory)
+authCategory := httplib.NewErrorCategory(http.StatusUnauthorized)
+httplib.AddErrorType[*AuthError](authCategory)
 ```
 
 ## API Reference
@@ -246,19 +327,55 @@ middleware.AddErrorType[*AuthError](authCategory)
 ### Types
 
 - `ResponseWriter`: Enhanced response writer with status code tracking
-- `CustomHandler`: Handler function that returns an error
+- `ResponseBuilder`: Fluent API for building HTTP responses
+- `JSONResponseBuilder`: Builder for JSON responses
+- `TextResponseBuilder`: Builder for text responses
+- `HTMLResponseBuilder`: Builder for HTML responses
+- `ErrorResponseBuilder`: Builder for structured error responses
 - `HTTPError`: Interface for errors with HTTP status codes
 - `ErrorCategory`: Groups errors by HTTP status code
 - `AccessLogOptions`: Configuration for access logging
 - `HttpAccessLogger`: Access logging middleware
-- `Errorhandler`: Error handling middleware
 - `Recoverer`: Panic recovery middleware
 
 ### Functions
 
+#### Response Building
+- `NewResponseBuilder(w http.ResponseWriter) *ResponseBuilder`
+- `(rb *ResponseBuilder) Status(code int) *ResponseBuilder`
+- `(rb *ResponseBuilder) Header(key, value string) *ResponseBuilder`
+- `(rb *ResponseBuilder) JSON() *JSONResponseBuilder`
+- `(rb *ResponseBuilder) Text() *TextResponseBuilder`
+- `(rb *ResponseBuilder) HTML() *HTMLResponseBuilder`
+- `(rb *ResponseBuilder) Error() *ErrorResponseBuilder`
+
+#### JSON Response Building
+- `(jrb *JSONResponseBuilder) Data(data interface{}) *JSONResponseBuilder`
+- `(jrb *JSONResponseBuilder) Send() error`
+
+#### Text Response Building
+- `(trb *TextResponseBuilder) Content(content []byte) *TextResponseBuilder`
+- `(trb *TextResponseBuilder) ContentString(content string) *TextResponseBuilder`
+- `(trb *TextResponseBuilder) Send() error`
+
+#### HTML Response Building
+- `(hrb *HTMLResponseBuilder) Content(content []byte) *HTMLResponseBuilder`
+- `(hrb *HTMLResponseBuilder) ContentString(content string) *HTMLResponseBuilder`
+- `(hrb *HTMLResponseBuilder) Send() error`
+
+#### Error Response Building
+- `(erb *ErrorResponseBuilder) WithError(err error) *ErrorResponseBuilder`
+- `(erb *ErrorResponseBuilder) WithMessage(message string) *ErrorResponseBuilder`
+- `(erb *ErrorResponseBuilder) AsJSON() *ErrorResponseBuilder`
+- `(erb *ErrorResponseBuilder) WithLogger(logger *slog.Logger) *ErrorResponseBuilder`
+- `(erb *ErrorResponseBuilder) WithContext(ctx context.Context) *ErrorResponseBuilder`
+- `(erb *ErrorResponseBuilder) WithErrorCategories(categories ...*ErrorCategory) *ErrorResponseBuilder`
+- `(erb *ErrorResponseBuilder) AddErrorCategory(category *ErrorCategory) *ErrorResponseBuilder`
+- `(erb *ErrorResponseBuilder) Send() error`
+
+#### Core Functions
 - `NewResponseWriter(w http.ResponseWriter) *ResponseWriter`
 - `NewHttpAccessLogger(next http.Handler, logger *slog.Logger, options AccessLogOptions) *HttpAccessLogger`
-- `NewErrorhandler(next CustomHandler, ctx context.Context, logger *slog.Logger, categories []*ErrorCategory) *Errorhandler`
 - `NewErrorCategory(statusCode int) *ErrorCategory`
 - `AddErrorType[T error](ec *ErrorCategory)`
 
