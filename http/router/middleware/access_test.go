@@ -32,7 +32,7 @@ type accessLog struct {
 	Code      string `json:"Response Status Code"`
 }
 
-func (suite *AccessSuite) TestAccessLoggerCanLogAccessDetails() {
+func (suite *AccessSuite) TestItCanLogAccessDetails() {
 	outputBuffer := new(bytes.Buffer)
 	logger := slog.New(slog.NewJSONHandler(outputBuffer, &slog.HandlerOptions{}))
 
@@ -51,7 +51,7 @@ func (suite *AccessSuite) TestAccessLoggerCanLogAccessDetails() {
 	request.Header.Set("User-Agent", expectedUserAgent)
 	request.RemoteAddr = expectedIp
 
-	middleware := NewHttpAccessLogger(
+	middleware := NewHTTPAccessLogger(
 		http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(expectedCode)

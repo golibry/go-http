@@ -4,44 +4,56 @@ import (
 	"fmt"
 	httpInternal "github.com/golibry/go-http/http"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 )
 
 const AccessLogMessage = "HTTP Request"
 
-type HttpAccessLogger struct {
-	nextHandler http.Handler
-	logger      *slog.Logger
-	options     AccessLogOptions
+// extractClientIP safely extracts the client IP from RemoteAddr, handling both IPv4 and IPv6
+func extractClientIP(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		// If SplitHostPort fails, return the original address
+		// This handles cases where there's no port or malformed address
+		return remoteAddr
+	}
+	return host
+}
+
+type HTTPAccessLogger struct {
+	next    http.Handler
+	logger  *slog.Logger
+	options AccessLogOptions
 }
 
 type AccessLogOptions struct {
 	LogClientIp bool
 }
 
-func NewHttpAccessLogger(
+func NewHTTPAccessLogger(
 	next http.Handler,
 	logger *slog.Logger,
 	options AccessLogOptions,
-) *HttpAccessLogger {
-	return &HttpAccessLogger{next, logger, options}
+) *HTTPAccessLogger {
+	return &HTTPAccessLogger{next, logger, options}
 }
 
-func (accessLogger *HttpAccessLogger) ServeHTTP(rw http.ResponseWriter, rq *http.Request) {
+func (accessLogger *HTTPAccessLogger) ServeHTTP(rw http.ResponseWriter, rq *http.Request) {
 	logResponseWriter := httpInternal.NewResponseWriter(rw)
 	timeBeforeServe := time.Now().UnixMilli()
-	accessLogger.nextHandler.ServeHTTP(logResponseWriter, rq)
+	accessLogger.next.ServeHTTP(logResponseWriter, rq)
 	timeAfterServe := time.Now().UnixMilli()
 
 	var entries []slog.Attr
 
 	if accessLogger.options.LogClientIp {
+		clientIP := extractClientIP(rq.RemoteAddr)
 		entries = append(
 			entries,
-			slog.String("Client IP", strings.Split(rq.RemoteAddr, ":")[0]),
+			slog.String("Client IP", clientIP),
 		)
 	}
 

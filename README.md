@@ -208,7 +208,7 @@ func setupAccessLogger() http.Handler {
     }
     
     // Create access logger middleware
-    return middleware.NewHttpAccessLogger(mainHandler, logger, options)
+    return middleware.NewHTTPAccessLogger(mainHandler, logger, options)
 }
 ```
 
@@ -278,7 +278,7 @@ func setupMiddlewareChain() http.Handler {
         w.Write([]byte("Hello, World!"))
     })
     
-    accessLogger := middleware.NewHttpAccessLogger(
+    accessLogger := middleware.NewHTTPAccessLogger(
         mainHandler,
         logger,
         middleware.AccessLogOptions{LogClientIp: true},

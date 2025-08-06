@@ -55,22 +55,22 @@ func AddErrorType[T error](ec *ErrorCategory) {
 	)
 }
 
-type AccessResponseWriter struct {
+type ResponseWriter struct {
 	http.ResponseWriter
 	statusCode int
 }
 
-func NewResponseWriter(w http.ResponseWriter) *AccessResponseWriter {
-	return &AccessResponseWriter{w, http.StatusOK}
+func NewResponseWriter(w http.ResponseWriter) *ResponseWriter {
+	return &ResponseWriter{w, http.StatusOK}
 }
 
-func (lrw *AccessResponseWriter) WriteHeader(code int) {
-	lrw.statusCode = code
-	lrw.ResponseWriter.WriteHeader(code)
+func (rw *ResponseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
 }
 
-func (lrw *AccessResponseWriter) StatusCode() int {
-	return lrw.statusCode
+func (rw *ResponseWriter) StatusCode() int {
+	return rw.statusCode
 }
 
 // ResponseBuilder provides a base structure for building HTTP responses
@@ -133,66 +133,55 @@ func (jrb *JSONResponseBuilder) Send() error {
 	return json.NewEncoder(jrb.writer).Encode(jrb.data)
 }
 
-// TextResponseBuilder builds plain text responses
-type TextResponseBuilder struct {
+// ContentResponseBuilder provides common functionality for content-based responses
+type ContentResponseBuilder struct {
 	*ResponseBuilder
 	content []byte
+}
+
+// Content sets the content to be written
+func (crb *ContentResponseBuilder) Content(content []byte) *ContentResponseBuilder {
+	crb.content = content
+	return crb
+}
+
+// ContentString sets the content from a string
+func (crb *ContentResponseBuilder) ContentString(content string) *ContentResponseBuilder {
+	crb.content = []byte(content)
+	return crb
+}
+
+// Send writes the content response
+func (crb *ContentResponseBuilder) Send() error {
+	crb.writeHeaders()
+	_, err := crb.writer.Write(crb.content)
+	return err
+}
+
+// TextResponseBuilder builds plain text responses
+type TextResponseBuilder struct {
+	*ContentResponseBuilder
 }
 
 // Text creates a new text response builder
 func (rb *ResponseBuilder) Text() *TextResponseBuilder {
 	rb.Header("Content-Type", "text/plain; charset=utf-8")
-	return &TextResponseBuilder{ResponseBuilder: rb}
-}
-
-// Content sets the text content to be written
-func (trb *TextResponseBuilder) Content(content []byte) *TextResponseBuilder {
-	trb.content = content
-	return trb
-}
-
-// ContentString sets the text content from a string
-func (trb *TextResponseBuilder) ContentString(content string) *TextResponseBuilder {
-	trb.content = []byte(content)
-	return trb
-}
-
-// Send writes the text response
-func (trb *TextResponseBuilder) Send() error {
-	trb.writeHeaders()
-	_, err := trb.writer.Write(trb.content)
-	return err
+	return &TextResponseBuilder{
+		ContentResponseBuilder: &ContentResponseBuilder{ResponseBuilder: rb},
+	}
 }
 
 // HTMLResponseBuilder builds HTML responses
 type HTMLResponseBuilder struct {
-	*ResponseBuilder
-	content []byte
+	*ContentResponseBuilder
 }
 
 // HTML creates a new HTML response builder
 func (rb *ResponseBuilder) HTML() *HTMLResponseBuilder {
 	rb.Header("Content-Type", "text/html; charset=utf-8")
-	return &HTMLResponseBuilder{ResponseBuilder: rb}
-}
-
-// Content sets the HTML content to be written
-func (hrb *HTMLResponseBuilder) Content(content []byte) *HTMLResponseBuilder {
-	hrb.content = content
-	return hrb
-}
-
-// ContentString sets the HTML content from a string
-func (hrb *HTMLResponseBuilder) ContentString(content string) *HTMLResponseBuilder {
-	hrb.content = []byte(content)
-	return hrb
-}
-
-// Send writes the HTML response
-func (hrb *HTMLResponseBuilder) Send() error {
-	hrb.writeHeaders()
-	_, err := hrb.writer.Write(hrb.content)
-	return err
+	return &HTMLResponseBuilder{
+		ContentResponseBuilder: &ContentResponseBuilder{ResponseBuilder: rb},
+	}
 }
 
 // ErrorResponseBuilder builds error responses with advanced error handling capabilities
