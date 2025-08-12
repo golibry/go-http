@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -30,22 +29,23 @@ type timeoutLog struct {
 }
 
 func (suite *TimeoutSuite) TestItCanHandleRequestWithinTimeout() {
-	ctx := context.Background()
 	outputBuffer := new(bytes.Buffer)
 	logger := slog.New(slog.NewJSONHandler(outputBuffer, &slog.HandlerOptions{}))
 
 	// Create a handler that responds quickly
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("success"))
-	})
+	handler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("success"))
+		},
+	)
 
 	options := TimeoutOptions{
 		Timeout:      1 * time.Second,
 		ErrorMessage: "Request timed out",
 	}
 
-	middleware := NewTimeoutMiddleware(handler, ctx, logger, options)
+	middleware := NewTimeoutMiddleware(handler, logger, options)
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	recorder := httptest.NewRecorder()
@@ -59,23 +59,24 @@ func (suite *TimeoutSuite) TestItCanHandleRequestWithinTimeout() {
 }
 
 func (suite *TimeoutSuite) TestItCanHandleRequestTimeout() {
-	ctx := context.Background()
 	outputBuffer := new(bytes.Buffer)
 	logger := slog.New(slog.NewJSONHandler(outputBuffer, &slog.HandlerOptions{}))
 
 	// Create a handler that takes longer than the timeout
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(200 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("should not reach here"))
-	})
+	handler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(200 * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("should not reach here"))
+		},
+	)
 
 	options := TimeoutOptions{
 		Timeout:      50 * time.Millisecond,
 		ErrorMessage: "Custom timeout message",
 	}
 
-	middleware := NewTimeoutMiddleware(handler, ctx, logger, options)
+	middleware := NewTimeoutMiddleware(handler, logger, options)
 
 	req := httptest.NewRequest("GET", "/timeout-test", nil)
 	recorder := httptest.NewRecorder()
@@ -97,51 +98,55 @@ func (suite *TimeoutSuite) TestItCanHandleRequestTimeout() {
 }
 
 func (suite *TimeoutSuite) TestItCanUseDefaultValues() {
-	ctx := context.Background()
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
+	handler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		},
+	)
 
 	// Create middleware with empty options to test defaults
-	middleware := NewTimeoutMiddleware(handler, ctx, nil, TimeoutOptions{})
+	middleware := NewTimeoutMiddleware(handler, nil, TimeoutOptions{})
 
 	suite.Equal(30*time.Second, middleware.options.Timeout)
 	suite.Equal("Request timeout", middleware.options.ErrorMessage)
 }
 
 func (suite *TimeoutSuite) TestItCanHandlePanicInHandler() {
-	ctx := context.Background()
 	logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), &slog.HandlerOptions{}))
 
 	// Create a handler that panics
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		panic("test panic")
-	})
+	handler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			panic("test panic")
+		},
+	)
 
 	options := TimeoutOptions{
 		Timeout:      1 * time.Second,
 		ErrorMessage: "Request timed out",
 	}
 
-	middleware := NewTimeoutMiddleware(handler, ctx, logger, options)
+	middleware := NewTimeoutMiddleware(handler, logger, options)
 
 	req := httptest.NewRequest("GET", "/panic-test", nil)
 	recorder := httptest.NewRecorder()
 
 	// Should re-panic
-	suite.Panics(func() {
-		middleware.ServeHTTP(recorder, req)
-	})
+	suite.Panics(
+		func() {
+			middleware.ServeHTTP(recorder, req)
+		},
+	)
 }
 
 func (suite *TimeoutSuite) TestItCanHandleNilLogger() {
-	ctx := context.Background()
-
 	// Create a handler that takes longer than the timeout
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(200 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
-	})
+	handler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(200 * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+		},
+	)
 
 	options := TimeoutOptions{
 		Timeout:      50 * time.Millisecond,
@@ -149,29 +154,32 @@ func (suite *TimeoutSuite) TestItCanHandleNilLogger() {
 	}
 
 	// Pass nil logger
-	middleware := NewTimeoutMiddleware(handler, ctx, nil, options)
+	middleware := NewTimeoutMiddleware(handler, nil, options)
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	recorder := httptest.NewRecorder()
 
 	// Should not panic even with nil logger
-	suite.NotPanics(func() {
-		middleware.ServeHTTP(recorder, req)
-	})
+	suite.NotPanics(
+		func() {
+			middleware.ServeHTTP(recorder, req)
+		},
+	)
 
 	suite.Equal(http.StatusRequestTimeout, recorder.Code)
 	suite.Equal("Timeout occurred", recorder.Body.String())
 }
 
 func (suite *TimeoutSuite) TestItCanHandleCustomTimeoutAndMessage() {
-	ctx := context.Background()
 	outputBuffer := new(bytes.Buffer)
 	logger := slog.New(slog.NewJSONHandler(outputBuffer, &slog.HandlerOptions{}))
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(150 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
-	})
+	handler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(150 * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+		},
+	)
 
 	customTimeout := 100 * time.Millisecond
 	customMessage := "Custom timeout error message"
@@ -181,7 +189,7 @@ func (suite *TimeoutSuite) TestItCanHandleCustomTimeoutAndMessage() {
 		ErrorMessage: customMessage,
 	}
 
-	middleware := NewTimeoutMiddleware(handler, ctx, logger, options)
+	middleware := NewTimeoutMiddleware(handler, logger, options)
 
 	req := httptest.NewRequest("POST", "/custom", nil)
 	recorder := httptest.NewRecorder()
@@ -200,22 +208,23 @@ func (suite *TimeoutSuite) TestItCanHandleCustomTimeoutAndMessage() {
 }
 
 func (suite *TimeoutSuite) TestItCanHandleQuickSuccessfulRequest() {
-	ctx := context.Background()
 	logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), &slog.HandlerOptions{}))
 
 	// Handler that responds immediately
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Custom", "test-value")
-		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("quick response"))
-	})
+	handler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Custom", "test-value")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte("quick response"))
+		},
+	)
 
 	options := TimeoutOptions{
 		Timeout:      5 * time.Second, // Long timeout
 		ErrorMessage: "Should not timeout",
 	}
 
-	middleware := NewTimeoutMiddleware(handler, ctx, logger, options)
+	middleware := NewTimeoutMiddleware(handler, logger, options)
 
 	req := httptest.NewRequest("PUT", "/quick", nil)
 	recorder := httptest.NewRecorder()

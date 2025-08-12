@@ -10,7 +10,6 @@ import (
 // TimeoutMiddleware provides request timeout handling middleware
 type TimeoutMiddleware struct {
 	next    http.Handler
-	ctx     context.Context
 	logger  *slog.Logger
 	options TimeoutOptions
 }
@@ -24,7 +23,6 @@ type TimeoutOptions struct {
 // NewTimeoutMiddleware creates new timeout middleware
 func NewTimeoutMiddleware(
 	next http.Handler,
-	ctx context.Context,
 	logger *slog.Logger,
 	options TimeoutOptions,
 ) *TimeoutMiddleware {
@@ -40,7 +38,6 @@ func NewTimeoutMiddleware(
 
 	return &TimeoutMiddleware{
 		next:    next,
-		ctx:     ctx,
 		logger:  logger,
 		options: options,
 	}
@@ -85,7 +82,7 @@ func (tm *TimeoutMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Request timed out
 		if tm.logger != nil {
 			tm.logger.WarnContext(
-				tm.ctx,
+				r.Context(),
 				"Request timeout",
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
