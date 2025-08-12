@@ -14,29 +14,35 @@ import (
 
 func main() {
 	// Create a structured logger
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
+	logger := slog.New(
+		slog.NewJSONHandler(
+			os.Stdout, &slog.HandlerOptions{
+				Level: slog.LevelInfo,
+			},
+		),
+	)
 
 	ctx := context.Background()
 
 	// Example 1: Standalone timeout middleware usage
 	log.Println("=== Example 1: Standalone Timeout Middleware ===")
-	
+
 	// Create a slow handler for demonstration
-	slowHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("Handler started for %s", r.URL.Path)
-		time.Sleep(2 * time.Second) // Simulate slow processing
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Slow response completed"))
-	})
+	slowHandler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			log.Printf("Handler started for %s", r.URL.Path)
+			time.Sleep(2 * time.Second) // Simulate slow processing
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("Slow response completed"))
+		},
+	)
 
 	// Create timeout middleware with 1 second timeout
 	timeoutOptions := middleware.TimeoutOptions{
 		Timeout:      1 * time.Second,
 		ErrorMessage: "Request took too long to process",
 	}
-	
+
 	_ = middleware.NewTimeoutMiddleware(
 		slowHandler,
 		ctx,
@@ -62,15 +68,19 @@ func main() {
 
 	// Create logging middleware for comparison
 	loggingWrapper := func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			start := time.Now()
-			log.Printf("Request started: %s %s", r.Method, r.URL.Path)
-			
-			next.ServeHTTP(w, r)
-			
-			log.Printf("Request completed: %s %s (took %v)", 
-				r.Method, r.URL.Path, time.Since(start))
-		})
+		return http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				start := time.Now()
+				log.Printf("Request started: %s %s", r.Method, r.URL.Path)
+
+				next.ServeHTTP(w, r)
+
+				log.Printf(
+					"Request completed: %s %s (took %v)",
+					r.Method, r.URL.Path, time.Since(start),
+				)
+			},
+		)
 	}
 
 	// Define named middlewares including timeout
@@ -83,18 +93,22 @@ func main() {
 	mux := router.NewServerMuxWrapper(namedMiddlewares)
 
 	// Fast handler (completes within timeout)
-	fastHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(500 * time.Millisecond) // Fast processing
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Fast response"))
-	})
+	fastHandler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(500 * time.Millisecond) // Fast processing
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("Fast response"))
+		},
+	)
 
 	// Slow handler (exceeds timeout)
-	verySlowHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(5 * time.Second) // Very slow processing
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("This should timeout"))
-	})
+	verySlowHandler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(5 * time.Second) // Very slow processing
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("This should timeout"))
+		},
+	)
 
 	// Register routes with default middlewares (including timeout)
 	mux.Handle("/fast", fastHandler)
@@ -113,8 +127,8 @@ func main() {
 		)
 	}
 
-	overrides := map[string]func(http.Handler) http.Handler{
-		"timeout": customTimeoutWrapper,
+	overrides := []router.NamedMiddleware{
+		{Name: "timeout", Middleware: customTimeoutWrapper},
 	}
 	mux.HandleWithCustomMiddlewares("/slow-with-long-timeout", verySlowHandler, overrides)
 
