@@ -20,12 +20,14 @@ type HTTPError interface {
 type ErrorCategory struct {
 	StatusCode int
 	checkFuncs []func(error) bool
+	logEnabled bool
 }
 
 func NewErrorCategory(statusCode int) *ErrorCategory {
 	return &ErrorCategory{
 		StatusCode: statusCode,
 		checkFuncs: make([]func(error) bool, 0),
+		logEnabled: true, // default: log errors of this category
 	}
 }
 
@@ -45,6 +47,21 @@ func (ec *ErrorCategory) Matches(err error) bool {
 	}
 	return false
 }
+
+// WithLogging enables or disables logging for this category and returns the category for chaining
+func (ec *ErrorCategory) WithLogging(enabled bool) *ErrorCategory {
+	ec.logEnabled = enabled
+	return ec
+}
+
+// DisableLogging disables logging for this error category and returns the category for chaining
+func (ec *ErrorCategory) DisableLogging() *ErrorCategory { return ec.WithLogging(false) }
+
+// EnableLogging enables logging for this error category and returns the category for chaining
+func (ec *ErrorCategory) EnableLogging() *ErrorCategory { return ec.WithLogging(true) }
+
+// IsLoggingEnabled returns whether logging is enabled for this category
+func (ec *ErrorCategory) IsLoggingEnabled() bool { return ec.logEnabled }
 
 func AddErrorType[T error](ec *ErrorCategory) {
 	ec.checkFuncs = append(
@@ -247,37 +264,38 @@ func (erb *ErrorResponseBuilder) AddErrorCategory(category *ErrorCategory) *Erro
 	return erb
 }
 
-// getStatusCode determines the HTTP status code for an error using enhanced classification
-func (erb *ErrorResponseBuilder) getStatusCode(err error) int {
+// classifyError determines the HTTP status code and matched category for an error
+func (erb *ErrorResponseBuilder) classifyError(err error) (int, *ErrorCategory) {
 	// Check if the error implements HTTPError interface
 	var httpErr HTTPError
 	if errors.As(err, &httpErr) {
-		return httpErr.StatusCode()
+		return httpErr.StatusCode(), nil
 	}
 
 	// Check error categories
 	for _, category := range erb.categories {
 		if category.Matches(err) {
-			return category.StatusCode
+			return category.StatusCode, category
 		}
 	}
 
 	// If a status code was explicitly set (not the default 200), use it
 	// We only use the explicitly set status code if it's not the default OK status
 	if erb.statusCode != 0 && erb.statusCode != http.StatusOK {
-		return erb.statusCode
+		return erb.statusCode, nil
 	}
 
 	// Default to internal server error for errors
-	return http.StatusInternalServerError
+	return http.StatusInternalServerError, nil
 }
 
 // Send writes the error response with enhanced error handling
 func (erb *ErrorResponseBuilder) Send() error {
-	// Determine the appropriate status code
+	// Determine the appropriate status code and matched category
 	var statusCode int
+	var matchedCategory *ErrorCategory
 	if erb.err != nil {
-		statusCode = erb.getStatusCode(erb.err)
+		statusCode, matchedCategory = erb.classifyError(erb.err)
 	} else {
 		// Use explicitly set status code or default
 		statusCode = erb.statusCode
@@ -289,22 +307,28 @@ func (erb *ErrorResponseBuilder) Send() error {
 	// Update the response builder's status code
 	erb.Status(statusCode)
 
-	// Log the error if logger is available and there's an error
+	// Log the error based on category logging policy
 	if erb.err != nil {
-		if erb.logger != nil {
-			logCtx := erb.ctx
-			if logCtx == nil {
-				logCtx = context.Background()
+		shouldLog := true
+		if matchedCategory != nil {
+			shouldLog = matchedCategory.IsLoggingEnabled()
+		}
+		if shouldLog {
+			if erb.logger != nil {
+				logCtx := erb.ctx
+				if logCtx == nil {
+					logCtx = context.Background()
+				}
+				erb.logger.ErrorContext(
+					logCtx,
+					"HTTP Request Error",
+					slog.String("Error", erb.err.Error()),
+					slog.Int("StatusCode", statusCode),
+				)
+			} else {
+				// Fallback to stderr if no logger available
+				_, _ = fmt.Fprintf(os.Stderr, "Error: %+v\n", erb.err)
 			}
-			erb.logger.ErrorContext(
-				logCtx,
-				"HTTP Request Error",
-				slog.String("Error", erb.err.Error()),
-				slog.Int("StatusCode", statusCode),
-			)
-		} else {
-			// Fallback to stderr if no logger available
-			_, _ = fmt.Fprintf(os.Stderr, "Error: %+v\n", erb.err)
 		}
 	}
 

@@ -12,6 +12,13 @@ Migrated from https://github.com/rsgcata/go-http
 - **Recoverer**: Panic recovery middleware with structured logging
 - **Session Management**: Comprehensive session handling with attributes, flash messages, and encryption
 
+## Recent Changes (2025-10-27)
+
+- Error handling: Added per-category logging control for `ErrorCategory`.
+  - New methods on `ErrorCategory`: `WithLogging(enabled bool)`, `DisableLogging()`, `EnableLogging()`, `IsLoggingEnabled()`.
+  - `ErrorResponseBuilder.Send()` now honors the matched category’s logging flag: when a category matches the error, it logs only if logging is enabled for that category. If no category matches, default behavior remains (logs when logger provided; otherwise writes to stderr).
+  - See updated examples in the Error Handling Patterns section below.
+
 ## Installation
 
 ```bash
@@ -312,7 +319,11 @@ func (e NotFoundError) StatusCode() int {
 ### Error Categories
 
 ```go
-import httplib "github.com/golibry/go-http/http"
+import (
+    "errors"
+    "net/http"
+    httplib "github.com/golibry/go-http/http"
+)
 
 // Create categories for different error types
 validationCategory := httplib.NewErrorCategory(http.StatusBadRequest)
@@ -320,6 +331,38 @@ validationCategory.AddSentinelError(errors.New("validation error"))
 
 authCategory := httplib.NewErrorCategory(http.StatusUnauthorized)
 httplib.AddErrorType[*AuthError](authCategory)
+```
+
+#### Per-Category Logging Control
+
+You can enable or disable logging for specific error categories. When an error matches a category, `ErrorResponseBuilder.Send()` will only log if logging is enabled for that matched category. If no category matches, the default behavior applies (logs when a logger is provided; otherwise writes to stderr).
+
+```go
+// Suppose you want to avoid logging validation errors (noisy, expected user mistakes)
+validationCategory := httplib.NewErrorCategory(http.StatusBadRequest)
+httplib.AddErrorType[ValidationError](validationCategory)
+validationCategory.DisableLogging()
+
+// Later in your handler
+_ = httplib.NewResponseBuilder(w).
+    Error().
+    WithError(ValidationError{Field: "email"}).
+    AddErrorCategory(validationCategory).
+    WithLogger(logger).
+    WithContext(r.Context()).
+    Send()
+
+// The response will be 400 with the error message, but no log will be emitted for this matched category
+```
+
+To re-enable logging for a category or toggle it dynamically:
+
+```go
+category := httplib.NewErrorCategory(http.StatusInternalServerError)
+category.EnableLogging()               // explicit enable
+_ = category.WithLogging(false)        // disable via fluent method
+_ = category.WithLogging(true)         // enable via fluent method
+_ = category.IsLoggingEnabled()        // query current setting
 ```
 
 ## API Reference
@@ -335,7 +378,7 @@ httplib.AddErrorType[*AuthError](authCategory)
 - `HTTPError`: Interface for errors with HTTP status codes
 - `ErrorCategory`: Groups errors by HTTP status code
 - `AccessLogOptions`: Configuration for access logging
-- `HttpAccessLogger`: Access logging middleware
+- `HTTPAccessLogger`: Access logging middleware
 - `Recoverer`: Panic recovery middleware
 
 ### Functions
@@ -375,9 +418,16 @@ httplib.AddErrorType[*AuthError](authCategory)
 
 #### Core Functions
 - `NewResponseWriter(w http.ResponseWriter) *ResponseWriter`
-- `NewHttpAccessLogger(next http.Handler, logger *slog.Logger, options AccessLogOptions) *HttpAccessLogger`
+- `NewHTTPAccessLogger(next http.Handler, logger *slog.Logger, options AccessLogOptions) *HTTPAccessLogger`
 - `NewErrorCategory(statusCode int) *ErrorCategory`
 - `AddErrorType[T error](ec *ErrorCategory)`
+
+#### ErrorCategory Methods
+- `(ec *ErrorCategory) AddSentinelError(e error)`
+- `(ec *ErrorCategory) WithLogging(enabled bool) *ErrorCategory`
+- `(ec *ErrorCategory) DisableLogging() *ErrorCategory`
+- `(ec *ErrorCategory) EnableLogging() *ErrorCategory`
+- `(ec *ErrorCategory) IsLoggingEnabled() bool`
 
 ## Requirements
 
