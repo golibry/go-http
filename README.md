@@ -231,6 +231,66 @@ func setupAccessLogger() http.Handler {
 - Client IP (optional)
 
 
+### CSRF Middleware
+
+Protects endpoints against cross-site request forgery by requiring a deliberate custom header on unsafe HTTP methods. This pattern is well-suited for APIs/SPAs where the frontend can explicitly add the header when a user intentionally performs a state-changing action.
+
+Default behavior:
+- Validates only for unsafe methods: POST, PUT, PATCH, DELETE
+- Header name: `X-Deliberate-Request`
+- Header value: `1`
+- On failure: responds with `403 Forbidden`, content type `text/plain; charset=utf-8`, body: `Forbidden`
+- Logs a warning (if a logger is provided) with structured fields: `method`, `path`, `header`
+
+Basic usage (defaults):
+```go
+import (
+    "log/slog"
+    "net/http"
+    "github.com/golibry/go-http/http/router/middleware"
+)
+
+func setupCSRF() http.Handler {
+    logger := slog.Default()
+
+    // Your main handler
+    mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(http.StatusOK)
+        _, _ = w.Write([]byte("OK"))
+    })
+
+    // Wrap with CSRF middleware using defaults
+    // Requires header: X-Deliberate-Request: 1 for POST/PUT/PATCH/DELETE
+    return middleware.NewCSRFMiddleware(mainHandler, logger, middleware.CSRFOptions{})
+}
+```
+
+Client example (JavaScript fetch):
+```js
+await fetch("/api/items", {
+  method: "POST",
+  headers: { "X-Deliberate-Request": "1" },
+  body: JSON.stringify({ name: "example" })
+});
+```
+
+Customizing options:
+```go
+opts := middleware.CSRFOptions{
+    HeaderName:    "X-Custom-Deliberate",
+    HeaderValue:   "yes",
+    ErrorMessage:  "Forbidden: deliberate header missing or invalid",
+    UnsafeMethods: []string{http.MethodPost, http.MethodDelete},
+}
+
+csrf := middleware.NewCSRFMiddleware(mainHandler, logger, opts)
+```
+
+Notes:
+- Only requests whose method is listed in `UnsafeMethods` are validated. You may add or remove methods as needed.
+- The header value must exactly match `HeaderValue`.
+- Place this middleware early in your chain to reject invalid requests before they reach business logic.
+
 ### Recoverer Middleware
 
 Panic recovery middleware that catches panics and converts them to HTTP errors.
