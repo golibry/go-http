@@ -237,7 +237,7 @@ func (m *ManagerImpl) NewSession(
 	http.SetCookie(w, cookie)
 
 	// Save session
-	if err := session.Save(ctx); err != nil {
+	if err = session.Save(ctx); err != nil {
 		return nil, err
 	}
 
@@ -259,6 +259,8 @@ func (m *ManagerImpl) GetSession(ctx context.Context, r *http.Request) (Session,
 	// Get session data from storage
 	data, err := m.storage.Get(ctx, sessionID)
 	if err != nil {
+		return nil, err
+	} else if data == nil {
 		return nil, ErrSessionNotFound
 	}
 
@@ -272,7 +274,7 @@ func (m *ManagerImpl) GetSession(ctx context.Context, r *http.Request) (Session,
 
 	// Deserialize session data
 	var sessionData SessionData
-	if err := json.Unmarshal(data, &sessionData); err != nil {
+	if err = json.Unmarshal(data, &sessionData); err != nil {
 		return nil, ErrInvalidSession
 	}
 
@@ -582,100 +584,4 @@ func (s *sessionImpl) Destroy(ctx context.Context) error {
 	s.dirty = false
 
 	return nil
-}
-
-// MemoryStorage provides in-memory session storage
-type MemoryStorage struct {
-	sessions map[string]*memorySession
-	mu       sync.RWMutex
-}
-
-type memorySession struct {
-	data      []byte
-	expiresAt time.Time
-}
-
-// NewMemoryStorage creates a new in-memory storage
-func NewMemoryStorage() *MemoryStorage {
-	return &MemoryStorage{
-		sessions: make(map[string]*memorySession),
-	}
-}
-
-// Get retrieves session data by ID
-func (ms *MemoryStorage) Get(_ context.Context, sessionID string) ([]byte, error) {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-
-	session, exists := ms.sessions[sessionID]
-	if !exists {
-		return nil, ErrSessionNotFound
-	}
-
-	if time.Now().After(session.expiresAt) {
-		delete(ms.sessions, sessionID)
-		return nil, ErrSessionNotFound
-	}
-
-	return session.data, nil
-}
-
-// Set stores session data with expiration
-func (ms *MemoryStorage) Set(
-	_ context.Context,
-	sessionID string,
-	data []byte,
-	expiration time.Duration,
-) error {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
-
-	ms.sessions[sessionID] = &memorySession{
-		data:      data,
-		expiresAt: time.Now().Add(expiration),
-	}
-
-	return nil
-}
-
-// Delete removes session data
-func (ms *MemoryStorage) Delete(_ context.Context, sessionID string) error {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
-
-	delete(ms.sessions, sessionID)
-	return nil
-}
-
-// Cleanup removes expired sessions
-func (ms *MemoryStorage) Cleanup(_ context.Context) error {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
-
-	now := time.Now()
-	for sessionID, session := range ms.sessions {
-		if now.After(session.expiresAt) {
-			delete(ms.sessions, sessionID)
-		}
-	}
-
-	return nil
-}
-
-// Exists checks if session exists
-func (ms *MemoryStorage) Exists(_ context.Context, sessionID string) bool {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-
-	session, exists := ms.sessions[sessionID]
-	if !exists {
-		return false
-	}
-
-	if time.Now().After(session.expiresAt) {
-		delete(ms.sessions, sessionID)
-		return false
-	}
-
-	return true
 }

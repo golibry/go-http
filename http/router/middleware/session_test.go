@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/golibry/go-http/http/session"
+	"github.com/golibry/go-http/http/session/storage"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -26,7 +27,7 @@ func TestSessionMiddlewareSuite(t *testing.T) {
 }
 
 func (suite *SessionMiddlewareTestSuite) SetupTest() {
-	suite.storage = session.NewMemoryStorage()
+ suite.storage = storage.NewMemoryStorage()
 	suite.ctx = context.Background()
 	suite.logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 

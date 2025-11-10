@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golibry/go-http/http/session/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -17,7 +18,7 @@ import (
 // SessionTestSuite provides test suite for session functionality
 type SessionTestSuite struct {
 	suite.Suite
-	storage Storage
+	storage *storage.MemoryStorage
 	manager Manager
 	ctx     context.Context
 	logger  *slog.Logger
@@ -29,12 +30,12 @@ func TestSessionSuite(t *testing.T) {
 }
 
 func (suite *SessionTestSuite) SetupTest() {
-	suite.storage = NewMemoryStorage()
+	suite.storage = storage.NewMemoryStorage()
 	suite.ctx = context.Background()
 	suite.logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	options := DefaultOptions()
-	// Set encryption key for testing
+	// Set an encryption key for testing
 	encryptionKey := make([]byte, 32)
 	_, _ = rand.Read(encryptionKey)
 	options.EncryptionKey = encryptionKey
@@ -116,7 +117,7 @@ func (suite *SessionTestSuite) TestItCanSetAndGetAttributes() {
 	suite.True(exists)
 	suite.Equal(42, count)
 
-	// Test non-existent key
+	// Test a non-existent key
 	_, exists = session.Get("nonexistent")
 	suite.False(exists)
 }
@@ -304,9 +305,9 @@ func (suite *SessionTestSuite) TestItCanStartAndStopGarbageCollection() {
 
 func (suite *SessionTestSuite) TestMemoryStorageCanCleanupExpiredSessions() {
 	// Arrange
-	memStorage := NewMemoryStorage()
+	memStorage := storage.NewMemoryStorage()
 
-	// Add expired session
+	// Add an expired session
 	expiredData := []byte("expired")
 	err := memStorage.Set(suite.ctx, "expired_session", expiredData, -time.Hour)
 	suite.NoError(err)

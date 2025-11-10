@@ -27,6 +27,7 @@ import (
     
     "github.com/golibry/go-http/http/session"
     "github.com/golibry/go-http/http/router/middleware"
+"github.com/golibry/go-http/http/session/storage"
 )
 
 func main() {
