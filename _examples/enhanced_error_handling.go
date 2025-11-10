@@ -13,6 +13,7 @@ import (
 )
 
 // Custom error types demonstrating HTTPError interface
+
 type AuthenticationError struct {
 	message string
 }
@@ -33,7 +34,7 @@ func (e ValidationError) Error() string {
 	return fmt.Sprintf("validation failed for field: %s", e.field)
 }
 
-// Database connection error (sentinel error)
+// ErrDatabaseConnection Database connection error (sentinel error)
 var ErrDatabaseConnection = errors.New("database connection failed")
 
 func main() {
@@ -41,9 +42,13 @@ func main() {
 	fmt.Println("================================")
 
 	// Setup structured logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
+	logger := slog.New(
+		slog.NewTextHandler(
+			os.Stdout, &slog.HandlerOptions{
+				Level: slog.LevelDebug,
+			},
+		),
+	)
 	ctx := context.Background()
 
 	// Setup error categories
@@ -87,7 +92,11 @@ func demonstrateHTTPError(logger *slog.Logger, ctx context.Context) {
 	fmt.Printf("Response: %s\n", recorder.Body.String())
 }
 
-func demonstrateErrorCategories(logger *slog.Logger, ctx context.Context, validationCategory, dbCategory *httplib.ErrorCategory) {
+func demonstrateErrorCategories(
+	logger *slog.Logger,
+	ctx context.Context,
+	validationCategory, dbCategory *httplib.ErrorCategory,
+) {
 	// Validation error example
 	recorder1 := httptest.NewRecorder()
 	validationErr := ValidationError{field: "email"}
@@ -105,8 +114,10 @@ func demonstrateErrorCategories(logger *slog.Logger, ctx context.Context, valida
 		return
 	}
 
-	fmt.Printf("Validation Error - Status Code: %d, Response: %s\n", 
-		recorder1.Code, recorder1.Body.String())
+	fmt.Printf(
+		"Validation Error - Status Code: %d, Response: %s\n",
+		recorder1.Code, recorder1.Body.String(),
+	)
 
 	// Database error example
 	recorder2 := httptest.NewRecorder()
@@ -125,8 +136,10 @@ func demonstrateErrorCategories(logger *slog.Logger, ctx context.Context, valida
 		return
 	}
 
-	fmt.Printf("Database Error - Status Code: %d, Response: %s\n", 
-		recorder2.Code, recorder2.Body.String())
+	fmt.Printf(
+		"Database Error - Status Code: %d, Response: %s\n",
+		recorder2.Code, recorder2.Body.String(),
+	)
 }
 
 func demonstrateStructuredLogging(logger *slog.Logger, ctx context.Context) {
@@ -150,7 +163,11 @@ func demonstrateStructuredLogging(logger *slog.Logger, ctx context.Context) {
 	fmt.Printf("Response: %s\n", recorder.Body.String())
 }
 
-func demonstrateRealWorldScenario(logger *slog.Logger, ctx context.Context, validationCategory, dbCategory *httplib.ErrorCategory) {
+func demonstrateRealWorldScenario(
+	logger *slog.Logger,
+	ctx context.Context,
+	validationCategory, dbCategory *httplib.ErrorCategory,
+) {
 	fmt.Println("Simulating a user registration endpoint with multiple error types...")
 
 	// Scenario 1: Validation error

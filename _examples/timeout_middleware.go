@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"log/slog"
 	"net/http"
@@ -22,8 +21,6 @@ func main() {
 		),
 	)
 
-	ctx := context.Background()
-
 	// Example 1: Standalone timeout middleware usage
 	log.Println("=== Example 1: Standalone Timeout Middleware ===")
 
@@ -33,7 +30,7 @@ func main() {
 			log.Printf("Handler started for %s", r.URL.Path)
 			time.Sleep(2 * time.Second) // Simulate slow processing
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("Slow response completed"))
+			_, _ = w.Write([]byte("Slow response completed"))
 		},
 	)
 
@@ -45,19 +42,17 @@ func main() {
 
 	_ = middleware.NewTimeoutMiddleware(
 		slowHandler,
-		ctx,
 		logger,
 		timeoutOptions,
 	)
 
-	// Example 2: Integration with router system
+	// Example 2: Integration with the router system
 	log.Println("\n=== Example 2: Router Integration ===")
 
-	// Create timeout middleware wrapper function
+	// Create a timeout middleware wrapper function
 	timeoutWrapper := func(next http.Handler) http.Handler {
 		return middleware.NewTimeoutMiddleware(
 			next,
-			ctx,
 			logger,
 			middleware.TimeoutOptions{
 				Timeout:      3 * time.Second,
@@ -89,7 +84,7 @@ func main() {
 		{Name: "logging", Middleware: loggingWrapper},
 	}
 
-	// Create router with named middlewares
+	// Create a router with named middlewares
 	mux := router.NewServerMuxWrapper(namedMiddlewares)
 
 	// Fast handler (completes within timeout)
@@ -97,7 +92,7 @@ func main() {
 		func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(500 * time.Millisecond) // Fast processing
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("Fast response"))
+			_, _ = w.Write([]byte("Fast response"))
 		},
 	)
 
@@ -106,7 +101,7 @@ func main() {
 		func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(5 * time.Second) // Very slow processing
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("This should timeout"))
+			_, _ = w.Write([]byte("This should timeout"))
 		},
 	)
 
@@ -118,7 +113,6 @@ func main() {
 	customTimeoutWrapper := func(next http.Handler) http.Handler {
 		return middleware.NewTimeoutMiddleware(
 			next,
-			ctx,
 			logger,
 			middleware.TimeoutOptions{
 				Timeout:      10 * time.Second,
@@ -148,8 +142,8 @@ func main() {
 	}
 
 	// Create different timeout middlewares
-	apiTimeout := middleware.NewTimeoutMiddleware(fastHandler, ctx, logger, apiTimeoutOptions)
-	uploadTimeout := middleware.NewTimeoutMiddleware(slowHandler, ctx, logger, uploadTimeoutOptions)
+	apiTimeout := middleware.NewTimeoutMiddleware(fastHandler, logger, apiTimeoutOptions)
+	uploadTimeout := middleware.NewTimeoutMiddleware(slowHandler, logger, uploadTimeoutOptions)
 
 	// Register with different timeouts
 	mux.Handle("/api/data", apiTimeout)
