@@ -1,46 +1,31 @@
 
 # go-http
 
-A Go HTTP middleware library providing common functionalities for HTTP request/response handling, error management, access logging, and panic recovery.
+A Go HTTP middleware library for building robust request/response pipelines with structured errors, logging, routing, and sessions.
 
 Migrated from https://github.com/rsgcata/go-http
 
-## What this library offers
+## Features
 
-- Response building helpers for JSON, text, and HTML
-- Structured error handling with categories and optional logging
-- Enhanced response writer that tracks HTTP status codes
-- Middleware for access logging, panic recovery, request timeouts, path normalization, CSRF protection, and session management
-- A simple router with middleware chaining support
+- Response utilities
+  - ResponseBuilder for JSON, text, and HTML
+  - Enhanced ResponseWriter that tracks status codes
+- Error handling
+  - `HTTPError` interface and error categories
+  - Optional structured logging with context
+- Middleware
+  - Access logging, panic recovery, timeouts, path normalization, CSRF protection, session management
+- Router utilities
+  - Named middleware chaining with per-route overrides
+- Sessions
+  - Manager, middleware integration, memory/MySQL storage, flashes, GC lifecycle
 
-## Installation
+## Usage & Examples
 
-```bash
-go get github.com/golibry/go-http
-```
+This README intentionally avoids code examples. For in‑depth, runnable examples of every feature, see the `_examples/` directory in the repository.
 
-## How to learn and use it
-
-To keep this README focused, feature-specific code examples live in the `_examples` folder. Each example is a small, self‑contained program with comments explaining how to use a single feature.
-
-Start here:
-- Browse `_examples/` for runnable, focused examples (one file per feature)
-- See `http/session/README.md` for comprehensive session documentation
-- Check tests under `http/**` for additional usage patterns
-
-## Examples directory (overview)
-
-See the `_examples` folder for:
-- `response_builder.go` — Build JSON/Text/HTML and error responses
-- `enhanced_error_handling.go` — Error categories and logging controls
-- `timeout_middleware.go` — Request timeout middleware
-- `pathnormalizer.go` — Normalize URL paths
-- `access_logger.go` — Structured access logging middleware
-- `recoverer_middleware.go` — Panic recovery middleware
-- `csrf_middleware.go` — CSRF protection using a deliberate header
-- `response_writer.go` — Track status codes with a wrapped writer
-- `router_chain.go` — Chain multiple middleware
-- `session_management.go` — Sessions: attributes, flash, storage backends (see also `http/session/README.md`)
+- Start with `_examples/` to explore focused, one-file examples
+- See `http/session/README.md` for a sessions overview
 
 ## Requirements
 
