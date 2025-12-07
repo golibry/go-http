@@ -2,9 +2,7 @@ package storage
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/base64"
 	"fmt"
 	"testing"
 	"time"
@@ -12,7 +10,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/suite"
 
-	testcontainers "github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -78,9 +76,7 @@ func (s *MySQLStorageIntegrationSuite) SetupSuite() {
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	// unique table per run
-	s.tableName = "sessions_it_" + time.Now().UTC().Format("20060102_150405") + "_" + randSuffix(6)
-
+	s.tableName = "sessions_it"
 	s.store = NewMySQLStorage(s.db, s.tableName)
 	s.Require().NoError(s.store.Init(s.ctx))
 }
@@ -88,7 +84,10 @@ func (s *MySQLStorageIntegrationSuite) SetupSuite() {
 func (s *MySQLStorageIntegrationSuite) TearDownSuite() {
 	if s.db != nil {
 		// best-effort drop
-		_, _ = s.db.ExecContext(s.ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", s.tableName))
+		_, _ = s.db.ExecContext(
+			s.ctx,
+			fmt.Sprintf("DROP TABLE IF EXISTS `%s`", s.tableName),
+		)
 		_ = s.db.Close()
 	}
 	if s.container != nil {
@@ -97,7 +96,7 @@ func (s *MySQLStorageIntegrationSuite) TearDownSuite() {
 }
 
 func (s *MySQLStorageIntegrationSuite) TestItCanSetGetAndExists() {
-	id := "sess_" + randSuffix(8)
+	id := "sess_a"
 	data := []byte("hello world")
 
 	// Set with 10s TTL
@@ -114,11 +113,11 @@ func (s *MySQLStorageIntegrationSuite) TestItCanSetGetAndExists() {
 }
 
 func (s *MySQLStorageIntegrationSuite) TestItHonorsUpsert() {
-	id := "sess_" + randSuffix(8)
+	id := "sess_b"
 	err := s.store.Set(s.ctx, id, []byte("v1"), 60*time.Second)
 	s.Require().NoError(err)
 
-	// Update same id with new data and TTL
+	// Update the same id with new data and TTL
 	err = s.store.Set(s.ctx, id, []byte("v2"), 60*time.Second)
 	s.Require().NoError(err)
 
@@ -128,7 +127,7 @@ func (s *MySQLStorageIntegrationSuite) TestItHonorsUpsert() {
 }
 
 func (s *MySQLStorageIntegrationSuite) TestItCanDelete() {
-	id := "sess_" + randSuffix(8)
+	id := "sess_c"
 	err := s.store.Set(s.ctx, id, []byte("to-delete"), 60*time.Second)
 	s.Require().NoError(err)
 
@@ -143,8 +142,8 @@ func (s *MySQLStorageIntegrationSuite) TestItCanDelete() {
 }
 
 func (s *MySQLStorageIntegrationSuite) TestItExpiresAndCleansUp() {
-	id1 := "sess_" + randSuffix(8)
-	id2 := "sess_" + randSuffix(8)
+	id1 := "sess_d1"
+	id2 := "sess_d2"
 
 	// Short TTLs
 	s.Require().NoError(s.store.Set(s.ctx, id1, []byte("short"), 1*time.Second))
@@ -164,19 +163,10 @@ func (s *MySQLStorageIntegrationSuite) TestItExpiresAndCleansUp() {
 	var count int
 	row := s.db.QueryRowContext(
 		s.ctx,
-		"SELECT COUNT(*) FROM "+s.tableName+" WHERE id IN (?, ?)",
+		"SELECT COUNT(*) FROM `"+s.tableName+"` WHERE id IN (?, ?)",
 		id1,
 		id2,
 	)
 	s.Require().NoError(row.Scan(&count))
 	s.Equal(0, count)
-}
-
-func randSuffix(n int) string {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		// fallback to time
-		return base64.RawURLEncoding.EncodeToString([]byte(time.Now().Format("150405.000")))
-	}
-	return base64.RawURLEncoding.EncodeToString(b)
 }

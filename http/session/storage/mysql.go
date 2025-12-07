@@ -45,7 +45,7 @@ func (ms *MySQLStorage) Get(ctx context.Context, sessionID string) ([]byte, erro
 
 	// Only return non-expired sessions (expires_at is BIGINT unix seconds)
 	now := time.Now().UTC().Unix()
-	query := "SELECT data FROM " + ms.tableName + " WHERE id = ? AND expires_at > ? LIMIT 1"
+	query := "SELECT `data` FROM `" + ms.tableName + "` WHERE `id` = ? AND `expires_at` > ? LIMIT 1"
 	row := ms.db.QueryRowContext(ctx, query, sessionID, now)
 
 	var data []byte
@@ -73,8 +73,10 @@ func (ms *MySQLStorage) Set(
 	expSec := nowSec + int64(expiration.Seconds())
 
 	// Use INSERT ... ON DUPLICATE KEY UPDATE for upsert
-	stmt := "INSERT INTO " + ms.tableName + " (id, data, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?) " +
-		"ON DUPLICATE KEY UPDATE data = VALUES(data), expires_at = VALUES(expires_at), updated_at = VALUES(updated_at)"
+	stmt := "INSERT INTO `" + ms.tableName +
+		"` (`id`, `data`, `expires_at`, `created_at`, `updated_at`) VALUES (?, ?, ?, ?, ?) " +
+		"ON DUPLICATE KEY UPDATE `data` = VALUES(`data`), " +
+		"`expires_at` = VALUES(`expires_at`), `updated_at` = VALUES(`updated_at`)"
 	_, err := ms.db.ExecContext(ctx, stmt, sessionID, data, expSec, nowSec, nowSec)
 	return err
 }
@@ -84,7 +86,7 @@ func (ms *MySQLStorage) Delete(ctx context.Context, sessionID string) error {
 	if sessionID == "" {
 		return nil
 	}
-	stmt := "DELETE FROM " + ms.tableName + " WHERE id = ?"
+	stmt := "DELETE FROM `" + ms.tableName + "` WHERE `id` = ?"
 	_, err := ms.db.ExecContext(ctx, stmt, sessionID)
 	return err
 }
@@ -92,7 +94,7 @@ func (ms *MySQLStorage) Delete(ctx context.Context, sessionID string) error {
 // Cleanup removes expired sessions.
 func (ms *MySQLStorage) Cleanup(ctx context.Context) error {
 	nowSec := time.Now().UTC().Unix()
-	stmt := "DELETE FROM " + ms.tableName + " WHERE expires_at <= ?"
+	stmt := "DELETE FROM `" + ms.tableName + "` WHERE `expires_at` <= ?"
 	_, err := ms.db.ExecContext(ctx, stmt, nowSec)
 	return err
 }
@@ -103,7 +105,7 @@ func (ms *MySQLStorage) Exists(ctx context.Context, sessionID string) bool {
 		return false
 	}
 	nowSec := time.Now().UTC().Unix()
-	query := "SELECT 1 FROM " + ms.tableName + " WHERE id = ? AND expires_at > ? LIMIT 1"
+	query := "SELECT 1 FROM `" + ms.tableName + "` WHERE `id` = ? AND `expires_at` > ? LIMIT 1"
 	row := ms.db.QueryRowContext(ctx, query, sessionID, nowSec)
 	var one int
 	if err := row.Scan(&one); err != nil {
@@ -117,14 +119,14 @@ func (ms *MySQLStorage) Init(ctx context.Context) error {
 	if ms.db == nil || ms.tableName == "" {
 		return errors.New("invalid storage configuration: db or table name is empty")
 	}
-	stmt := "CREATE TABLE IF NOT EXISTS " + ms.tableName + " (" +
-		"id VARCHAR(191) NOT NULL," +
-		"data LONGBLOB NOT NULL," +
-		"expires_at BIGINT NOT NULL," +
-		"created_at BIGINT NOT NULL," +
-		"updated_at BIGINT NOT NULL," +
-		"PRIMARY KEY (id)," +
-		"KEY idx_expires_at (expires_at)" +
+	stmt := "CREATE TABLE IF NOT EXISTS `" + ms.tableName + "` (" +
+		"`id` VARCHAR(191) NOT NULL," +
+		"`data` LONGBLOB NOT NULL," +
+		"`expires_at` BIGINT NOT NULL," +
+		"`created_at` BIGINT NOT NULL," +
+		"`updated_at` BIGINT NOT NULL," +
+		"PRIMARY KEY (`id`)," +
+		"KEY idx_expires_at (`expires_at`)" +
 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 	_, err := ms.db.ExecContext(ctx, stmt)
 	return err
