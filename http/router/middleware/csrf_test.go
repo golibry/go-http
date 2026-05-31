@@ -202,6 +202,47 @@ func (s *CSRFSuite) TestExcludedPathsUseExactMatch() {
 	s.Equal(http.StatusForbidden, rr.Code)
 }
 
+func (s *CSRFSuite) TestItSkipsExcludedPathPrefixes() {
+	handler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusAccepted)
+		},
+	)
+
+	mw := NewCSRFMiddleware(handler, nil, CSRFOptions{
+		ExcludedPathPrefixes: []string{"/internal/"},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/internal/jobs/run", nil)
+	rr := httptest.NewRecorder()
+
+	mw.ServeHTTP(rr, req)
+
+	s.Equal(http.StatusAccepted, rr.Code)
+}
+
+func (s *CSRFSuite) TestItSkipsCustomExcludedRequests() {
+	handler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusAccepted)
+		},
+	)
+
+	mw := NewCSRFMiddleware(handler, nil, CSRFOptions{
+		Exclude: func(r *http.Request) bool {
+			return r.Header.Get("X-Internal-Call") == "1"
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/jobs/run", nil)
+	req.Header.Set("X-Internal-Call", "1")
+	rr := httptest.NewRecorder()
+
+	mw.ServeHTTP(rr, req)
+
+	s.Equal(http.StatusAccepted, rr.Code)
+}
+
 func (s *CSRFSuite) TestItLogsWarningOnFailure() {
 	output := new(bytes.Buffer)
 	logger := slog.New(slog.NewJSONHandler(output, &slog.HandlerOptions{}))

@@ -96,6 +96,9 @@ type Manager interface {
 	// DestroySession removes a session
 	DestroySession(ctx context.Context, w http.ResponseWriter, r *http.Request) error
 
+	// RegenerateSession replaces the current session ID while preserving session data.
+	RegenerateSession(ctx context.Context, w http.ResponseWriter, r *http.Request) (Session, error)
+
 	// StartGC starts garbage collection
 	StartGC(ctx context.Context)
 
@@ -211,6 +214,9 @@ func ValidateOptions(options Options) error {
 	if options.GCInterval <= 0 {
 		return fmt.Errorf("%w: gc interval must be greater than zero", ErrInvalidOptions)
 	}
+	if options.CookieSameSite == http.SameSiteNoneMode && !options.CookieSecure {
+		return fmt.Errorf("%w: SameSite=None requires Secure cookies", ErrInvalidOptions)
+	}
 
 	keyLength := len(options.EncryptionKey)
 	if keyLength != 0 && keyLength != 16 && keyLength != 24 && keyLength != 32 {
@@ -299,18 +305,7 @@ func (m *ManagerImpl) NewSession(
 		dirty:   true,
 	}
 
-	// Set cookie
-	cookie := &http.Cookie{
-		Name:     m.options.CookieName,
-		Value:    sessionID,
-		Path:     m.options.CookiePath,
-		Domain:   m.options.CookieDomain,
-		MaxAge:   int(m.options.MaxAge.Seconds()),
-		Secure:   m.options.CookieSecure,
-		HttpOnly: m.options.CookieHTTPOnly,
-		SameSite: m.options.CookieSameSite,
-	}
-	http.SetCookie(w, cookie)
+	m.setSessionCookie(w, sessionID)
 
 	// Save session
 	if err = session.Save(ctx); err != nil {
@@ -378,12 +373,85 @@ func (m *ManagerImpl) DestroySession(
 	w http.ResponseWriter,
 	r *http.Request,
 ) error {
+	m.clearSessionCookie(w)
+
 	session, err := m.GetSession(ctx, r)
 	if err != nil {
+		if errors.Is(err, ErrSessionNotFound) {
+			return nil
+		}
 		return err
 	}
 
-	// Remove cookie
+	return session.Destroy(ctx)
+}
+
+// RegenerateSession replaces the current session ID while preserving session data.
+func (m *ManagerImpl) RegenerateSession(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+) (Session, error) {
+	currentSession, err := m.GetSession(ctx, r)
+	if err != nil {
+		if errors.Is(err, ErrSessionNotFound) {
+			return m.NewSession(ctx, w, r)
+		}
+		return nil, err
+	}
+
+	currentImpl, ok := currentSession.(*sessionImpl)
+	if !ok {
+		return nil, ErrInvalidSession
+	}
+
+	sessionID, err := m.generateSessionID()
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	oldSessionID, attributes, flashData := currentImpl.snapshot()
+	newSession := &sessionImpl{
+		data: &SessionData{
+			ID:         sessionID,
+			Attributes: attributes,
+			FlashData:  flashData,
+			CreatedAt:  now,
+			LastAccess: now,
+		},
+		storage: m.storage,
+		manager: m,
+		dirty:   true,
+	}
+
+	if err := m.storage.Delete(ctx, oldSessionID); err != nil {
+		return nil, fmt.Errorf("failed to destroy previous session: %w", err)
+	}
+
+	m.setSessionCookie(w, sessionID)
+	if err := newSession.Save(ctx); err != nil {
+		return nil, err
+	}
+
+	return newSession, nil
+}
+
+func (m *ManagerImpl) setSessionCookie(w http.ResponseWriter, sessionID string) {
+	cookie := &http.Cookie{
+		Name:     m.options.CookieName,
+		Value:    sessionID,
+		Path:     m.options.CookiePath,
+		Domain:   m.options.CookieDomain,
+		MaxAge:   int(m.options.MaxAge.Seconds()),
+		Secure:   m.options.CookieSecure,
+		HttpOnly: m.options.CookieHTTPOnly,
+		SameSite: m.options.CookieSameSite,
+	}
+	http.SetCookie(w, cookie)
+}
+
+func (m *ManagerImpl) clearSessionCookie(w http.ResponseWriter) {
 	cookie := &http.Cookie{
 		Name:     m.options.CookieName,
 		Value:    "",
@@ -395,8 +463,6 @@ func (m *ManagerImpl) DestroySession(
 		SameSite: m.options.CookieSameSite,
 	}
 	http.SetCookie(w, cookie)
-
-	return session.Destroy(ctx)
 }
 
 // StartGC starts garbage collection
@@ -597,6 +663,25 @@ func (s *sessionImpl) CreatedAt() time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.data.CreatedAt
+}
+
+func (s *sessionImpl) snapshot() (string, map[string]interface{}, map[string][]interface{}) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	attributes := make(map[string]interface{}, len(s.data.Attributes))
+	for key, value := range s.data.Attributes {
+		attributes[key] = value
+	}
+
+	flashData := make(map[string][]interface{}, len(s.data.FlashData))
+	for key, values := range s.data.FlashData {
+		copiedValues := make([]interface{}, len(values))
+		copy(copiedValues, values)
+		flashData[key] = copiedValues
+	}
+
+	return s.data.ID, attributes, flashData
 }
 
 // IsExpired checks if session is expired

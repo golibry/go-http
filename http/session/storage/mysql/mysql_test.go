@@ -1,6 +1,6 @@
 //go:build integration
 
-package storage
+package mysql
 
 import (
 	"context"
@@ -11,29 +11,27 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/suite"
-
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-type MySQLStorageIntegrationSuite struct {
+type StorageIntegrationSuite struct {
 	suite.Suite
 	db        *sql.DB
-	store     *MySQLStorage
+	store     *Storage
 	tableName string
 	ctx       context.Context
 	container testcontainers.Container
 }
 
-func TestMySQLStorageIntegrationSuite(t *testing.T) {
-	suite.Run(t, new(MySQLStorageIntegrationSuite))
+func TestStorageIntegrationSuite(t *testing.T) {
+	suite.Run(t, new(StorageIntegrationSuite))
 }
 
-func (s *MySQLStorageIntegrationSuite) SetupSuite() {
+func (s *StorageIntegrationSuite) SetupSuite() {
 	var err error
 	s.ctx = context.Background()
 
-	// Start an ephemeral MariaDB container (no persistent volumes)
 	req := testcontainers.ContainerRequest{
 		Image:        "mariadb:11",
 		ExposedPorts: []string{"3306/tcp"},
@@ -65,7 +63,6 @@ func (s *MySQLStorageIntegrationSuite) SetupSuite() {
 	s.db, err = sql.Open("mysql", dsn)
 	s.Require().NoError(err)
 
-	// Wait for DB to be really ready by retrying Ping
 	deadline := time.Now().Add(45 * time.Second)
 	for {
 		err = s.db.PingContext(s.ctx)
@@ -79,13 +76,12 @@ func (s *MySQLStorageIntegrationSuite) SetupSuite() {
 	}
 
 	s.tableName = "sessions_it"
-	s.store = NewMySQLStorage(s.db, s.tableName)
+	s.store = New(s.db, s.tableName)
 	s.Require().NoError(s.store.Init(s.ctx))
 }
 
-func (s *MySQLStorageIntegrationSuite) TearDownSuite() {
+func (s *StorageIntegrationSuite) TearDownSuite() {
 	if s.db != nil {
-		// best-effort drop
 		_, _ = s.db.ExecContext(
 			s.ctx,
 			fmt.Sprintf("DROP TABLE IF EXISTS `%s`", s.tableName),
@@ -97,29 +93,25 @@ func (s *MySQLStorageIntegrationSuite) TearDownSuite() {
 	}
 }
 
-func (s *MySQLStorageIntegrationSuite) TestItCanSetGetAndExists() {
+func (s *StorageIntegrationSuite) TestItCanSetGetAndExists() {
 	id := "sess_a"
 	data := []byte("hello world")
 
-	// Set with 10s TTL
 	err := s.store.Set(s.ctx, id, data, 10*time.Second)
 	s.Require().NoError(err)
 
-	// Exists should be true
 	s.True(s.store.Exists(s.ctx, id))
 
-	// Get should return the same data
 	got, err := s.store.Get(s.ctx, id)
 	s.Require().NoError(err)
 	s.Equal(data, got)
 }
 
-func (s *MySQLStorageIntegrationSuite) TestItHonorsUpsert() {
+func (s *StorageIntegrationSuite) TestItHonorsUpsert() {
 	id := "sess_b"
 	err := s.store.Set(s.ctx, id, []byte("v1"), 60*time.Second)
 	s.Require().NoError(err)
 
-	// Update the same id with new data and TTL
 	err = s.store.Set(s.ctx, id, []byte("v2"), 60*time.Second)
 	s.Require().NoError(err)
 
@@ -128,40 +120,33 @@ func (s *MySQLStorageIntegrationSuite) TestItHonorsUpsert() {
 	s.Equal([]byte("v2"), got)
 }
 
-func (s *MySQLStorageIntegrationSuite) TestItCanDelete() {
+func (s *StorageIntegrationSuite) TestItCanDelete() {
 	id := "sess_c"
 	err := s.store.Set(s.ctx, id, []byte("to-delete"), 60*time.Second)
 	s.Require().NoError(err)
 
-	// Delete
 	s.Require().NoError(s.store.Delete(s.ctx, id))
 
-	// Now it should not exist
 	s.False(s.store.Exists(s.ctx, id))
 	got, err := s.store.Get(s.ctx, id)
 	s.Require().NoError(err)
 	s.Nil(got)
 }
 
-func (s *MySQLStorageIntegrationSuite) TestItExpiresAndCleansUp() {
+func (s *StorageIntegrationSuite) TestItExpiresAndCleansUp() {
 	id1 := "sess_d1"
 	id2 := "sess_d2"
 
-	// Short TTLs
 	s.Require().NoError(s.store.Set(s.ctx, id1, []byte("short"), 1*time.Second))
 	s.Require().NoError(s.store.Set(s.ctx, id2, []byte("short2"), 1*time.Second))
 
-	// Wait to expire
 	time.Sleep(1500 * time.Millisecond)
 
-	// They should be considered non-existent (expired)
 	s.False(s.store.Exists(s.ctx, id1))
 	s.False(s.store.Exists(s.ctx, id2))
 
-	// Run cleanup to remove records physically
 	s.Require().NoError(s.store.Cleanup(s.ctx))
 
-	// Validate table has no rows with those ids
 	var count int
 	row := s.db.QueryRowContext(
 		s.ctx,

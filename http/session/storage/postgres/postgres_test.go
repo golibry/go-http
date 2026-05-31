@@ -1,6 +1,6 @@
 //go:build integration
 
-package storage
+package postgres
 
 import (
 	"context"
@@ -15,20 +15,20 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-type PostgreSQLStorageIntegrationSuite struct {
+type StorageIntegrationSuite struct {
 	suite.Suite
 	db        *sql.DB
-	store     *PostgreSQLStorage
+	store     *Storage
 	tableName string
 	ctx       context.Context
 	container testcontainers.Container
 }
 
-func TestPostgreSQLStorageIntegrationSuite(t *testing.T) {
-	suite.Run(t, new(PostgreSQLStorageIntegrationSuite))
+func TestStorageIntegrationSuite(t *testing.T) {
+	suite.Run(t, new(StorageIntegrationSuite))
 }
 
-func (s *PostgreSQLStorageIntegrationSuite) SetupSuite() {
+func (s *StorageIntegrationSuite) SetupSuite() {
 	var err error
 	s.ctx = context.Background()
 
@@ -75,15 +75,15 @@ func (s *PostgreSQLStorageIntegrationSuite) SetupSuite() {
 	}
 
 	s.tableName = "sessions_it"
-	s.store = NewPostgreSQLStorage(s.db, s.tableName)
+	s.store = New(s.db, s.tableName)
 	s.Require().NoError(s.store.Init(s.ctx))
 }
 
-func (s *PostgreSQLStorageIntegrationSuite) TearDownSuite() {
+func (s *StorageIntegrationSuite) TearDownSuite() {
 	if s.db != nil {
 		_, _ = s.db.ExecContext(
 			s.ctx,
-			fmt.Sprintf("DROP TABLE IF EXISTS %s", quotePostgreSQLTableName(s.tableName)),
+			fmt.Sprintf("DROP TABLE IF EXISTS %s", quoteTableName(s.tableName)),
 		)
 		_ = s.db.Close()
 	}
@@ -92,7 +92,7 @@ func (s *PostgreSQLStorageIntegrationSuite) TearDownSuite() {
 	}
 }
 
-func (s *PostgreSQLStorageIntegrationSuite) TestItCanSetGetAndExists() {
+func (s *StorageIntegrationSuite) TestItCanSetGetAndExists() {
 	id := "sess_a"
 	data := []byte("hello world")
 
@@ -106,7 +106,7 @@ func (s *PostgreSQLStorageIntegrationSuite) TestItCanSetGetAndExists() {
 	s.Equal(data, got)
 }
 
-func (s *PostgreSQLStorageIntegrationSuite) TestItHonorsUpsert() {
+func (s *StorageIntegrationSuite) TestItHonorsUpsert() {
 	id := "sess_b"
 	err := s.store.Set(s.ctx, id, []byte("v1"), 60*time.Second)
 	s.Require().NoError(err)
@@ -119,7 +119,7 @@ func (s *PostgreSQLStorageIntegrationSuite) TestItHonorsUpsert() {
 	s.Equal([]byte("v2"), got)
 }
 
-func (s *PostgreSQLStorageIntegrationSuite) TestItCanDelete() {
+func (s *StorageIntegrationSuite) TestItCanDelete() {
 	id := "sess_c"
 	err := s.store.Set(s.ctx, id, []byte("to-delete"), 60*time.Second)
 	s.Require().NoError(err)
@@ -132,7 +132,7 @@ func (s *PostgreSQLStorageIntegrationSuite) TestItCanDelete() {
 	s.Nil(got)
 }
 
-func (s *PostgreSQLStorageIntegrationSuite) TestItExpiresAndCleansUp() {
+func (s *StorageIntegrationSuite) TestItExpiresAndCleansUp() {
 	id1 := "sess_d1"
 	id2 := "sess_d2"
 
@@ -149,7 +149,7 @@ func (s *PostgreSQLStorageIntegrationSuite) TestItExpiresAndCleansUp() {
 	var count int
 	row := s.db.QueryRowContext(
 		s.ctx,
-		"SELECT COUNT(*) FROM "+quotePostgreSQLTableName(s.tableName)+" WHERE id IN ($1, $2)",
+		"SELECT COUNT(*) FROM "+quoteTableName(s.tableName)+" WHERE id IN ($1, $2)",
 		id1,
 		id2,
 	)

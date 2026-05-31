@@ -41,6 +41,11 @@ Common configuration areas:
 
 `NewManager` applies defaults for unset options. Use `NewValidatedManager` when the application should receive an error for invalid options, such as an AES key length other than 16, 24, or 32 bytes.
 
+Database storage backends live in explicit packages:
+
+- `github.com/golibry/go-http/http/session/storage/mysql`
+- `github.com/golibry/go-http/http/session/storage/postgres`
+
 MySQL and PostgreSQL storage integration tests are behind the `integration` build tag because they require Docker/testcontainers.
 
 ## Security Considerations

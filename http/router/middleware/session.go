@@ -9,7 +9,7 @@ import (
 	"github.com/golibry/go-http/http/session"
 )
 
-const sessionContextKey string = "session"
+type sessionContextKey struct{}
 
 // SessionMiddleware provides session handling middleware
 type SessionMiddleware struct {
@@ -45,22 +45,22 @@ func (sm *SessionMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Add session to request context
-	ctx := context.WithValue(r.Context(), sessionContextKey, sess)
+	ctx := context.WithValue(r.Context(), sessionContextKey{}, sess)
 	r = r.WithContext(ctx)
 
 	sm.next.ServeHTTP(w, r)
 
 	// Save a session if it exists and is dirty
 	if sess != nil {
-		if err := sess.Save(sm.ctx); err != nil && sm.logger != nil {
-			sm.logger.ErrorContext(sm.ctx, "Failed to save session", "error", err)
+		if err := sess.Save(r.Context()); err != nil && sm.logger != nil {
+			sm.logger.ErrorContext(r.Context(), "Failed to save session", "error", err)
 		}
 	}
 }
 
 // GetSessionFromContext retrieves session from request context
 func GetSessionFromContext(ctx context.Context) (session.Session, bool) {
-	sess, ok := ctx.Value(sessionContextKey).(session.Session)
+	sess, ok := ctx.Value(sessionContextKey{}).(session.Session)
 	return sess, ok
 }
 

@@ -256,6 +256,44 @@ func (suite *SessionTestSuite) TestItCanDestroySession() {
 	suite.False(exists)
 }
 
+func (suite *SessionTestSuite) TestDestroySessionClearsCookieWhenSessionIsMissing() {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	r.AddCookie(&http.Cookie{Name: "session_id", Value: "missing"})
+
+	err := suite.manager.DestroySession(suite.ctx, w, r)
+
+	suite.NoError(err)
+	cookies := w.Result().Cookies()
+	suite.Len(cookies, 1)
+	suite.Equal("session_id", cookies[0].Name)
+	suite.Equal(-1, cookies[0].MaxAge)
+}
+
+func (suite *SessionTestSuite) TestItCanRegenerateSession() {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	originalSession, err := suite.manager.NewSession(suite.ctx, w, r)
+	suite.NoError(err)
+	originalSession.Set("user_id", "123")
+	suite.NoError(originalSession.Save(suite.ctx))
+
+	r2 := httptest.NewRequest("GET", "/", nil)
+	r2.AddCookie(w.Result().Cookies()[0])
+	w2 := httptest.NewRecorder()
+
+	regeneratedSession, err := suite.manager.RegenerateSession(suite.ctx, w2, r2)
+
+	suite.NoError(err)
+	suite.NotEqual(originalSession.ID(), regeneratedSession.ID())
+	value, exists := regeneratedSession.Get("user_id")
+	suite.True(exists)
+	suite.Equal("123", value)
+	suite.False(suite.storage.Exists(suite.ctx, originalSession.ID()))
+	suite.True(suite.storage.Exists(suite.ctx, regeneratedSession.ID()))
+	suite.Equal(regeneratedSession.ID(), w2.Result().Cookies()[0].Value)
+}
+
 func (suite *SessionTestSuite) TestItCanSaveAndLoadSessionWithEncryption() {
 	// Arrange
 	w := httptest.NewRecorder()
@@ -395,6 +433,18 @@ func TestNewValidatedManagerRejectsInvalidDurations(t *testing.T) {
 
 func TestNewValidatedManagerRejectsNilStorage(t *testing.T) {
 	manager, err := NewValidatedManager(nil, context.Background(), nil, DefaultOptions())
+
+	assert.Nil(t, manager)
+	assert.ErrorIs(t, err, ErrInvalidOptions)
+}
+
+func TestNewValidatedManagerRejectsSameSiteNoneWithoutSecure(t *testing.T) {
+	store := storage.NewMemoryStorage()
+	options := DefaultOptions()
+	options.CookieSameSite = http.SameSiteNoneMode
+	options.CookieSecure = false
+
+	manager, err := NewValidatedManager(store, context.Background(), nil, options)
 
 	assert.Nil(t, manager)
 	assert.ErrorIs(t, err, ErrInvalidOptions)

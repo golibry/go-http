@@ -10,6 +10,10 @@ import (
 )
 
 // TimeoutMiddleware provides request timeout handling middleware
+//
+// The middleware buffers handler output until the handler completes. This keeps
+// timeout responses from being mixed with late handler writes. Streaming,
+// hijacking, and server-sent event handlers should bypass this middleware.
 type TimeoutMiddleware struct {
 	next    http.Handler
 	logger  *slog.Logger

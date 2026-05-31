@@ -14,7 +14,7 @@ Migrated from https://github.com/rsgcata/go-http
   - `HTTPError` interface and error categories
   - Optional structured logging with context
 - Middleware
-  - Access logging, panic recovery, timeouts, path normalization, CSRF protection, session management
+  - Access logging, panic recovery, buffered timeouts, path normalization, CSRF protection, session management
 - Router utilities
   - Named middleware chaining with per-route overrides
 - Sessions
@@ -43,8 +43,15 @@ go test ./...
 MySQL and PostgreSQL session storage integration tests use testcontainers and are behind the `integration` build tag:
 
 ```bash
-go test -tags=integration ./http/session/storage
+go test -tags=integration ./http/session/storage/...
 ```
+
+SQL session stores live in explicit backend packages:
+
+- `github.com/golibry/go-http/http/session/storage/mysql`
+- `github.com/golibry/go-http/http/session/storage/postgres`
+
+Timeout middleware buffers responses and is intended for regular request/response handlers. Streaming, hijacking, and server-sent event handlers should bypass it.
 
 ## License
 

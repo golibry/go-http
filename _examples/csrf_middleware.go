@@ -35,7 +35,7 @@ func main() {
 	)
 
 	csrf := middleware.NewCSRFMiddleware(mainHandler, logger, middleware.CSRFOptions{
-		ExcludedPaths: []string{"/internal/jobs/run"},
+		ExcludedPathPrefixes: []string{"/internal/"},
 	})
 
 	// 1) Missing deliberate header: should be forbidden
