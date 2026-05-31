@@ -18,7 +18,7 @@ Migrated from https://github.com/rsgcata/go-http
 - Router utilities
   - Named middleware chaining with per-route overrides
 - Sessions
-  - Manager, middleware integration, memory/MySQL/PostgreSQL storage, flashes, GC lifecycle
+  - Manager, middleware integration, memory/MySQL/PostgreSQL/Redis storage, flashes, GC lifecycle
 
 ## Usage & Examples
 
@@ -40,7 +40,7 @@ Normal unit tests do not require Docker:
 go test ./...
 ```
 
-MySQL and PostgreSQL session storage integration tests use testcontainers and are behind the `integration` build tag:
+MySQL, PostgreSQL, and Redis session storage integration tests use testcontainers and are behind the `integration` build tag:
 
 ```bash
 go test -tags=integration ./http/session/storage/...
@@ -50,6 +50,7 @@ SQL session stores live in explicit backend packages:
 
 - `github.com/golibry/go-http/http/session/storage/mysql`
 - `github.com/golibry/go-http/http/session/storage/postgres`
+- `github.com/golibry/go-http/http/session/storage/redis`
 
 Timeout middleware buffers responses and is intended for regular request/response handlers. Streaming, hijacking, and server-sent event handlers should bypass it.
 
