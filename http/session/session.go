@@ -22,6 +22,7 @@ var (
 	ErrInvalidSession   = errors.New("invalid session")
 	ErrEncryptionFailed = errors.New("encryption failed")
 	ErrDecryptionFailed = errors.New("decryption failed")
+	ErrInvalidOptions   = errors.New("invalid session options")
 )
 
 // Storage interface for pluggable session backends
@@ -170,6 +171,55 @@ func DefaultOptions() Options {
 	}
 }
 
+// NormalizeOptions applies default values for unset options.
+func NormalizeOptions(options Options) Options {
+	defaults := DefaultOptions()
+
+	if options.CookieName == "" {
+		options.CookieName = defaults.CookieName
+	}
+	if options.CookiePath == "" {
+		options.CookiePath = defaults.CookiePath
+	}
+	if options.CookieSameSite == 0 {
+		options.CookieSameSite = defaults.CookieSameSite
+	}
+	if options.MaxAge == 0 {
+		options.MaxAge = defaults.MaxAge
+	}
+	if options.IdleTimeout == 0 {
+		options.IdleTimeout = defaults.IdleTimeout
+	}
+	if options.GCInterval == 0 {
+		options.GCInterval = defaults.GCInterval
+	}
+
+	options.CookieHTTPOnly = true
+	options.SecureRandom = true
+
+	return options
+}
+
+// ValidateOptions validates session options that cannot be safely corrected.
+func ValidateOptions(options Options) error {
+	if options.MaxAge <= 0 {
+		return fmt.Errorf("%w: max age must be greater than zero", ErrInvalidOptions)
+	}
+	if options.IdleTimeout <= 0 {
+		return fmt.Errorf("%w: idle timeout must be greater than zero", ErrInvalidOptions)
+	}
+	if options.GCInterval <= 0 {
+		return fmt.Errorf("%w: gc interval must be greater than zero", ErrInvalidOptions)
+	}
+
+	keyLength := len(options.EncryptionKey)
+	if keyLength != 0 && keyLength != 16 && keyLength != 24 && keyLength != 32 {
+		return fmt.Errorf("%w: encryption key must be 16, 24, or 32 bytes", ErrInvalidOptions)
+	}
+
+	return nil
+}
+
 // NewManager creates a new session manager
 func NewManager(
 	storage Storage,
@@ -177,6 +227,32 @@ func NewManager(
 	logger *slog.Logger,
 	options Options,
 ) *ManagerImpl {
+	manager, err := NewValidatedManager(storage, ctx, logger, options)
+	if err != nil {
+		panic(err)
+	}
+
+	return manager
+}
+
+// NewValidatedManager creates a new session manager after normalizing and validating options.
+func NewValidatedManager(
+	storage Storage,
+	ctx context.Context,
+	logger *slog.Logger,
+	options Options,
+) (*ManagerImpl, error) {
+	options = NormalizeOptions(options)
+	if err := ValidateOptions(options); err != nil {
+		return nil, err
+	}
+	if storage == nil {
+		return nil, fmt.Errorf("%w: storage is required", ErrInvalidOptions)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	return &ManagerImpl{
 		storage:    storage,
 		cookieName: options.CookieName,
@@ -184,7 +260,7 @@ func NewManager(
 		gcStop:     make(chan struct{}),
 		logger:     logger,
 		ctx:        ctx,
-	}
+	}, nil
 }
 
 // generateSessionID creates a new session ID

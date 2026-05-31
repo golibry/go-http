@@ -162,6 +162,46 @@ func (s *CSRFSuite) TestItRespectsCustomUnsafeMethods() {
 	s.Equal(http.StatusOK, rr3.Code)
 }
 
+func (s *CSRFSuite) TestItSkipsExcludedPaths() {
+	handler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte("internal"))
+		},
+	)
+
+	mw := NewCSRFMiddleware(handler, nil, CSRFOptions{
+		ExcludedPaths: []string{"/internal/jobs/run"},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/internal/jobs/run", nil)
+	rr := httptest.NewRecorder()
+
+	mw.ServeHTTP(rr, req)
+
+	s.Equal(http.StatusAccepted, rr.Code)
+	s.Equal("internal", rr.Body.String())
+}
+
+func (s *CSRFSuite) TestExcludedPathsUseExactMatch() {
+	handler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		},
+	)
+
+	mw := NewCSRFMiddleware(handler, nil, CSRFOptions{
+		ExcludedPaths: []string{"/internal"},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/internal/jobs", nil)
+	rr := httptest.NewRecorder()
+
+	mw.ServeHTTP(rr, req)
+
+	s.Equal(http.StatusForbidden, rr.Code)
+}
+
 func (s *CSRFSuite) TestItLogsWarningOnFailure() {
 	output := new(bytes.Buffer)
 	logger := slog.New(slog.NewJSONHandler(output, &slog.HandlerOptions{}))

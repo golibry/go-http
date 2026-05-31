@@ -97,6 +97,32 @@ func (suite *TimeoutSuite) TestItCanHandleRequestTimeout() {
 	suite.Equal("/timeout-test", loggedEntry.Path)
 }
 
+func (suite *TimeoutSuite) TestTimedOutHandlerCannotWriteLateResponse() {
+	handler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(100 * time.Millisecond)
+			w.Header().Set("X-Late", "true")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("late response"))
+		},
+	)
+
+	middleware := NewTimeoutMiddleware(handler, nil, TimeoutOptions{
+		Timeout:      20 * time.Millisecond,
+		ErrorMessage: "timed out",
+	})
+
+	req := httptest.NewRequest("GET", "/late-timeout", nil)
+	recorder := httptest.NewRecorder()
+
+	middleware.ServeHTTP(recorder, req)
+	time.Sleep(150 * time.Millisecond)
+
+	suite.Equal(http.StatusRequestTimeout, recorder.Code)
+	suite.Equal("timed out", recorder.Body.String())
+	suite.Empty(recorder.Header().Get("X-Late"))
+}
+
 func (suite *TimeoutSuite) TestItCanUseDefaultValues() {
 	handler := http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {

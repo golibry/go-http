@@ -326,6 +326,24 @@ func (suite *SessionTestSuite) TestMemoryStorageCanCleanupExpiredSessions() {
 	suite.True(memStorage.Exists(suite.ctx, "valid_session"))
 }
 
+func (suite *SessionTestSuite) TestMemoryStorageCopiesDataOnSetAndGet() {
+	memStorage := storage.NewMemoryStorage()
+	original := []byte("stored")
+
+	err := memStorage.Set(suite.ctx, "copy_session", original, time.Hour)
+	suite.NoError(err)
+
+	original[0] = 'X'
+	got, err := memStorage.Get(suite.ctx, "copy_session")
+	suite.NoError(err)
+	suite.Equal([]byte("stored"), got)
+
+	got[0] = 'Y'
+	gotAgain, err := memStorage.Get(suite.ctx, "copy_session")
+	suite.NoError(err)
+	suite.Equal([]byte("stored"), gotAgain)
+}
+
 // Additional unit tests
 func TestDefaultOptions(t *testing.T) {
 	options := DefaultOptions()
@@ -340,9 +358,62 @@ func TestDefaultOptions(t *testing.T) {
 	assert.Equal(t, http.SameSiteLaxMode, options.CookieSameSite)
 }
 
+func TestNormalizeOptionsAppliesDefaults(t *testing.T) {
+	options := NormalizeOptions(Options{})
+
+	assert.Equal(t, "session_id", options.CookieName)
+	assert.Equal(t, "/", options.CookiePath)
+	assert.Equal(t, 24*time.Hour, options.MaxAge)
+	assert.Equal(t, 30*time.Minute, options.IdleTimeout)
+	assert.Equal(t, 5*time.Minute, options.GCInterval)
+	assert.True(t, options.SecureRandom)
+	assert.True(t, options.CookieHTTPOnly)
+	assert.Equal(t, http.SameSiteLaxMode, options.CookieSameSite)
+}
+
+func TestNewValidatedManagerRejectsInvalidEncryptionKey(t *testing.T) {
+	store := storage.NewMemoryStorage()
+	options := DefaultOptions()
+	options.EncryptionKey = []byte("short")
+
+	manager, err := NewValidatedManager(store, context.Background(), nil, options)
+
+	assert.Nil(t, manager)
+	assert.ErrorIs(t, err, ErrInvalidOptions)
+}
+
+func TestNewValidatedManagerRejectsInvalidDurations(t *testing.T) {
+	store := storage.NewMemoryStorage()
+	options := DefaultOptions()
+	options.MaxAge = -time.Second
+
+	manager, err := NewValidatedManager(store, context.Background(), nil, options)
+
+	assert.Nil(t, manager)
+	assert.ErrorIs(t, err, ErrInvalidOptions)
+}
+
+func TestNewValidatedManagerRejectsNilStorage(t *testing.T) {
+	manager, err := NewValidatedManager(nil, context.Background(), nil, DefaultOptions())
+
+	assert.Nil(t, manager)
+	assert.ErrorIs(t, err, ErrInvalidOptions)
+}
+
+func TestNewManagerPanicsWithInvalidEncryptionKey(t *testing.T) {
+	store := storage.NewMemoryStorage()
+	options := DefaultOptions()
+	options.EncryptionKey = []byte("short")
+
+	assert.Panics(t, func() {
+		NewManager(store, context.Background(), nil, options)
+	})
+}
+
 func TestSessionErrors(t *testing.T) {
 	assert.Equal(t, "session not found", ErrSessionNotFound.Error())
 	assert.Equal(t, "invalid session", ErrInvalidSession.Error())
 	assert.Equal(t, "encryption failed", ErrEncryptionFailed.Error())
 	assert.Equal(t, "decryption failed", ErrDecryptionFailed.Error())
+	assert.Equal(t, "invalid session options", ErrInvalidOptions.Error())
 }

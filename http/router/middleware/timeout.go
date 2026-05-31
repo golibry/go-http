@@ -1,9 +1,11 @@
 package middleware
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -52,7 +54,8 @@ func (tm *TimeoutMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Create a new request with the timeout context
 	r = r.WithContext(ctx)
 
-	// Channel to signal completion
+	timeoutWriter := newTimeoutResponseWriter()
+
 	done := make(chan struct{})
 	var panicValue interface{}
 
@@ -65,7 +68,7 @@ func (tm *TimeoutMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			close(done)
 		}()
 
-		tm.next.ServeHTTP(w, r)
+		tm.next.ServeHTTP(timeoutWriter, r)
 	}()
 
 	// Wait for either completion or timeout
@@ -76,6 +79,7 @@ func (tm *TimeoutMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// Re-panic if there was a panic in the handler
 			panic(panicValue)
 		}
+		timeoutWriter.WriteTo(w)
 		return
 
 	case <-ctx.Done():
@@ -90,12 +94,83 @@ func (tm *TimeoutMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			)
 		}
 
-		// Check if the response has already been written
-		if w.Header().Get("Content-Type") == "" {
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			w.WriteHeader(http.StatusRequestTimeout)
-			_, _ = w.Write([]byte(tm.options.ErrorMessage))
-		}
+		timeoutWriter.MarkTimedOut()
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusRequestTimeout)
+		_, _ = w.Write([]byte(tm.options.ErrorMessage))
 		return
 	}
+}
+
+type timeoutResponseWriter struct {
+	header      http.Header
+	body        bytes.Buffer
+	statusCode  int
+	wroteHeader bool
+	timedOut    bool
+	mu          sync.Mutex
+}
+
+func newTimeoutResponseWriter() *timeoutResponseWriter {
+	return &timeoutResponseWriter{
+		header:     make(http.Header),
+		statusCode: http.StatusOK,
+	}
+}
+
+func (tw *timeoutResponseWriter) Header() http.Header {
+	return tw.header
+}
+
+func (tw *timeoutResponseWriter) WriteHeader(statusCode int) {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+
+	if tw.timedOut || tw.wroteHeader {
+		return
+	}
+
+	tw.statusCode = statusCode
+	tw.wroteHeader = true
+}
+
+func (tw *timeoutResponseWriter) Write(data []byte) (int, error) {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+
+	if tw.timedOut {
+		return len(data), nil
+	}
+
+	if !tw.wroteHeader {
+		tw.statusCode = http.StatusOK
+		tw.wroteHeader = true
+	}
+
+	return tw.body.Write(data)
+}
+
+func (tw *timeoutResponseWriter) MarkTimedOut() {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+
+	tw.timedOut = true
+}
+
+func (tw *timeoutResponseWriter) WriteTo(w http.ResponseWriter) {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+
+	if tw.timedOut {
+		return
+	}
+
+	for key, values := range tw.header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+
+	w.WriteHeader(tw.statusCode)
+	_, _ = w.Write(tw.body.Bytes())
 }

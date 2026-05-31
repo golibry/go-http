@@ -34,7 +34,9 @@ func main() {
 		},
 	)
 
-	csrf := middleware.NewCSRFMiddleware(mainHandler, logger, middleware.CSRFOptions{})
+	csrf := middleware.NewCSRFMiddleware(mainHandler, logger, middleware.CSRFOptions{
+		ExcludedPaths: []string{"/internal/jobs/run"},
+	})
 
 	// 1) Missing deliberate header: should be forbidden
 	req1 := httptest.NewRequest(http.MethodPost, "http://example.com/api/items", nil)
@@ -48,4 +50,10 @@ func main() {
 	rec2 := httptest.NewRecorder()
 	csrf.ServeHTTP(rec2, req2)
 	fmt.Println("2) With header -> status:", rec2.Code, "body:", rec2.Body.String())
+
+	// 3) Excluded internal path: should bypass CSRF validation
+	req3 := httptest.NewRequest(http.MethodPost, "http://example.com/internal/jobs/run", nil)
+	rec3 := httptest.NewRecorder()
+	csrf.ServeHTTP(rec3, req3)
+	fmt.Println("3) Excluded path -> status:", rec3.Code, "body:", rec3.Body.String())
 }

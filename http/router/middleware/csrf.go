@@ -21,6 +21,7 @@ type CSRFMiddleware struct {
 // HeaderValue: required value; if empty, only header presence is validated (default: "true")
 // ErrorMessage: response message when validation fails (default: "CSRF validation failed")
 // UnsafeMethods: list of methods to validate; if empty defaults to POST, PUT, PATCH, DELETE
+// ExcludedPaths: exact URL paths that bypass CSRF validation
 //
 // Notes:
 // - Header comparison for value is case-sensitive; header name lookup is case-insensitive
@@ -30,6 +31,7 @@ type CSRFOptions struct {
 	HeaderValue   string
 	ErrorMessage  string
 	UnsafeMethods []string
+	ExcludedPaths []string
 }
 
 // NewCSRFMiddleware creates a new CSRF middleware instance
@@ -55,6 +57,11 @@ func NewCSRFMiddleware(
 
 // ServeHTTP implements the middleware logic
 func (cm *CSRFMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if cm.isExcludedPath(r.URL.Path) {
+		cm.next.ServeHTTP(w, r)
+		return
+	}
+
 	if !cm.shouldValidateMethod(r.Method) {
 		cm.next.ServeHTTP(w, r)
 		return
@@ -79,6 +86,16 @@ func (cm *CSRFMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cm.next.ServeHTTP(w, r)
+}
+
+func (cm *CSRFMiddleware) isExcludedPath(path string) bool {
+	for _, excludedPath := range cm.options.ExcludedPaths {
+		if path == excludedPath {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (cm *CSRFMiddleware) shouldValidateMethod(method string) bool {

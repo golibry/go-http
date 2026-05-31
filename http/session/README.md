@@ -9,7 +9,7 @@ Session management utilities for Go HTTP applications.
 - Lifecycle controls (auto-create, idle timeout, expiration)
 - Optional AES-GCM encryption for sensitive data
 - Garbage collection of expired sessions
-- Pluggable storage (in-memory and MySQL)
+- Pluggable storage (in-memory, MySQL, and PostgreSQL)
 - Middleware integration for automatic save/load
 
 ## Usage & Examples
@@ -37,7 +37,11 @@ Common configuration areas:
 - Cookie: name, domain, path, secure, httpOnly, sameSite
 - Timeouts: idle timeout and absolute expiration
 - Security: optional encryption key (AES-GCM)
-- Storage: choose memory or MySQL storage
+- Storage: choose memory, MySQL, or PostgreSQL storage
+
+`NewManager` applies defaults for unset options. Use `NewValidatedManager` when the application should receive an error for invalid options, such as an AES key length other than 16, 24, or 32 bytes.
+
+MySQL and PostgreSQL storage integration tests are behind the `integration` build tag because they require Docker/testcontainers.
 
 ## Security Considerations
 

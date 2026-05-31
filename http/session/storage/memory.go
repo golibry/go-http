@@ -28,8 +28,8 @@ func NewMemoryStorage() *MemoryStorage {
 
 // Get retrieves session data by ID
 func (ms *MemoryStorage) Get(_ context.Context, sessionID string) ([]byte, error) {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
 
 	s, exists := ms.sessions[sessionID]
 	if !exists {
@@ -42,7 +42,10 @@ func (ms *MemoryStorage) Get(_ context.Context, sessionID string) ([]byte, error
 		return nil, nil
 	}
 
-	return s.data, nil
+	data := make([]byte, len(s.data))
+	copy(data, s.data)
+
+	return data, nil
 }
 
 // Set stores session data with expiration
@@ -55,8 +58,11 @@ func (ms *MemoryStorage) Set(
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
+	storedData := make([]byte, len(data))
+	copy(storedData, data)
+
 	ms.sessions[sessionID] = &memorySession{
-		data:      data,
+		data:      storedData,
 		expiresAt: time.Now().Add(expiration),
 	}
 	return nil

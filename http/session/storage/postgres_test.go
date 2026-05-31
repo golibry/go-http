@@ -9,39 +9,37 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/suite"
-
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-type MySQLStorageIntegrationSuite struct {
+type PostgreSQLStorageIntegrationSuite struct {
 	suite.Suite
 	db        *sql.DB
-	store     *MySQLStorage
+	store     *PostgreSQLStorage
 	tableName string
 	ctx       context.Context
 	container testcontainers.Container
 }
 
-func TestMySQLStorageIntegrationSuite(t *testing.T) {
-	suite.Run(t, new(MySQLStorageIntegrationSuite))
+func TestPostgreSQLStorageIntegrationSuite(t *testing.T) {
+	suite.Run(t, new(PostgreSQLStorageIntegrationSuite))
 }
 
-func (s *MySQLStorageIntegrationSuite) SetupSuite() {
+func (s *PostgreSQLStorageIntegrationSuite) SetupSuite() {
 	var err error
 	s.ctx = context.Background()
 
-	// Start an ephemeral MariaDB container (no persistent volumes)
 	req := testcontainers.ContainerRequest{
-		Image:        "mariadb:11",
-		ExposedPorts: []string{"3306/tcp"},
+		Image:        "postgres:16",
+		ExposedPorts: []string{"5432/tcp"},
 		Env: map[string]string{
-			"MARIADB_ROOT_PASSWORD": "secret",
-			"MARIADB_DATABASE":      "testdb",
+			"POSTGRES_PASSWORD": "secret",
+			"POSTGRES_DB":       "testdb",
 		},
-		WaitingFor: wait.ForListeningPort("3306/tcp").WithStartupTimeout(45 * time.Second),
+		WaitingFor: wait.ForListeningPort("5432/tcp").WithStartupTimeout(45 * time.Second),
 	}
 	c, err := testcontainers.GenericContainer(
 		s.ctx,
@@ -52,20 +50,18 @@ func (s *MySQLStorageIntegrationSuite) SetupSuite() {
 
 	host, err := c.Host(s.ctx)
 	s.Require().NoError(err)
-	port, err := c.MappedPort(s.ctx, "3306/tcp")
+	port, err := c.MappedPort(s.ctx, "5432/tcp")
 	s.Require().NoError(err)
 
 	dsn := fmt.Sprintf(
-		"root:secret@tcp(%s:%s)/%s?parseTime=true&multiStatements=true",
+		"postgres://postgres:secret@%s:%s/testdb?sslmode=disable",
 		host,
 		port.Port(),
-		"testdb",
 	)
 
-	s.db, err = sql.Open("mysql", dsn)
+	s.db, err = sql.Open("postgres", dsn)
 	s.Require().NoError(err)
 
-	// Wait for DB to be really ready by retrying Ping
 	deadline := time.Now().Add(45 * time.Second)
 	for {
 		err = s.db.PingContext(s.ctx)
@@ -79,16 +75,15 @@ func (s *MySQLStorageIntegrationSuite) SetupSuite() {
 	}
 
 	s.tableName = "sessions_it"
-	s.store = NewMySQLStorage(s.db, s.tableName)
+	s.store = NewPostgreSQLStorage(s.db, s.tableName)
 	s.Require().NoError(s.store.Init(s.ctx))
 }
 
-func (s *MySQLStorageIntegrationSuite) TearDownSuite() {
+func (s *PostgreSQLStorageIntegrationSuite) TearDownSuite() {
 	if s.db != nil {
-		// best-effort drop
 		_, _ = s.db.ExecContext(
 			s.ctx,
-			fmt.Sprintf("DROP TABLE IF EXISTS `%s`", s.tableName),
+			fmt.Sprintf("DROP TABLE IF EXISTS %s", quotePostgreSQLTableName(s.tableName)),
 		)
 		_ = s.db.Close()
 	}
@@ -97,29 +92,25 @@ func (s *MySQLStorageIntegrationSuite) TearDownSuite() {
 	}
 }
 
-func (s *MySQLStorageIntegrationSuite) TestItCanSetGetAndExists() {
+func (s *PostgreSQLStorageIntegrationSuite) TestItCanSetGetAndExists() {
 	id := "sess_a"
 	data := []byte("hello world")
 
-	// Set with 10s TTL
 	err := s.store.Set(s.ctx, id, data, 10*time.Second)
 	s.Require().NoError(err)
 
-	// Exists should be true
 	s.True(s.store.Exists(s.ctx, id))
 
-	// Get should return the same data
 	got, err := s.store.Get(s.ctx, id)
 	s.Require().NoError(err)
 	s.Equal(data, got)
 }
 
-func (s *MySQLStorageIntegrationSuite) TestItHonorsUpsert() {
+func (s *PostgreSQLStorageIntegrationSuite) TestItHonorsUpsert() {
 	id := "sess_b"
 	err := s.store.Set(s.ctx, id, []byte("v1"), 60*time.Second)
 	s.Require().NoError(err)
 
-	// Update the same id with new data and TTL
 	err = s.store.Set(s.ctx, id, []byte("v2"), 60*time.Second)
 	s.Require().NoError(err)
 
@@ -128,44 +119,37 @@ func (s *MySQLStorageIntegrationSuite) TestItHonorsUpsert() {
 	s.Equal([]byte("v2"), got)
 }
 
-func (s *MySQLStorageIntegrationSuite) TestItCanDelete() {
+func (s *PostgreSQLStorageIntegrationSuite) TestItCanDelete() {
 	id := "sess_c"
 	err := s.store.Set(s.ctx, id, []byte("to-delete"), 60*time.Second)
 	s.Require().NoError(err)
 
-	// Delete
 	s.Require().NoError(s.store.Delete(s.ctx, id))
 
-	// Now it should not exist
 	s.False(s.store.Exists(s.ctx, id))
 	got, err := s.store.Get(s.ctx, id)
 	s.Require().NoError(err)
 	s.Nil(got)
 }
 
-func (s *MySQLStorageIntegrationSuite) TestItExpiresAndCleansUp() {
+func (s *PostgreSQLStorageIntegrationSuite) TestItExpiresAndCleansUp() {
 	id1 := "sess_d1"
 	id2 := "sess_d2"
 
-	// Short TTLs
 	s.Require().NoError(s.store.Set(s.ctx, id1, []byte("short"), 1*time.Second))
 	s.Require().NoError(s.store.Set(s.ctx, id2, []byte("short2"), 1*time.Second))
 
-	// Wait to expire
 	time.Sleep(1500 * time.Millisecond)
 
-	// They should be considered non-existent (expired)
 	s.False(s.store.Exists(s.ctx, id1))
 	s.False(s.store.Exists(s.ctx, id2))
 
-	// Run cleanup to remove records physically
 	s.Require().NoError(s.store.Cleanup(s.ctx))
 
-	// Validate table has no rows with those ids
 	var count int
 	row := s.db.QueryRowContext(
 		s.ctx,
-		"SELECT COUNT(*) FROM `"+s.tableName+"` WHERE id IN (?, ?)",
+		"SELECT COUNT(*) FROM "+quotePostgreSQLTableName(s.tableName)+" WHERE id IN ($1, $2)",
 		id1,
 		id2,
 	)
