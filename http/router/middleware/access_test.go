@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 )
 
@@ -20,17 +19,18 @@ func TestAccessSuite(t *testing.T) {
 }
 
 type accessLog struct {
-	Level     string `json:"level"`
-	Msg       string `json:"msg"`
-	Ip        string `json:"Client IP"`
-	Method    string `json:"Method"`
-	Host      string `json:"Host"`
-	Path      string `json:"Path"`
-	Query     string `json:"Query"`
-	Protocol  string `json:"Protocol"`
-	UserAgent string `json:"User Agent"`
-	Code      string `json:"Response Status Code"`
-	Bytes     int    `json:"Response Bytes"`
+	Level      string `json:"level"`
+	Msg        string `json:"msg"`
+	IP         string `json:"client_ip"`
+	Method     string `json:"method"`
+	Host       string `json:"host"`
+	Path       string `json:"path"`
+	Query      string `json:"query"`
+	Protocol   string `json:"protocol"`
+	UserAgent  string `json:"user_agent"`
+	Status     int    `json:"status"`
+	Bytes      int    `json:"bytes"`
+	DurationMS int64  `json:"duration_ms"`
 }
 
 func (suite *AccessSuite) TestItCanLogAccessDetails() {
@@ -73,13 +73,14 @@ func (suite *AccessSuite) TestItCanLogAccessDetails() {
 
 	suite.Assert().Equal(slog.LevelInfo.String(), loggedEntry.Level)
 	suite.Assert().Equal(AccessLogMessage, loggedEntry.Msg)
-	suite.Assert().Equal(expectedIp, loggedEntry.Ip)
+	suite.Assert().Equal(expectedIp, loggedEntry.IP)
 	suite.Assert().Equal(expectedMethod, loggedEntry.Method)
 	suite.Assert().Equal(expectedHost, loggedEntry.Host)
 	suite.Assert().Equal(expectedPath, loggedEntry.Path)
 	suite.Assert().Equal(expectedQuery, loggedEntry.Query)
 	suite.Assert().Equal(expectedProtocol, loggedEntry.Protocol)
 	suite.Assert().Equal(expectedUserAgent, loggedEntry.UserAgent)
-	suite.Assert().Equal(strconv.Itoa(expectedCode), loggedEntry.Code)
+	suite.Assert().Equal(expectedCode, loggedEntry.Status)
 	suite.Assert().Equal(5, loggedEntry.Bytes)
+	suite.Assert().GreaterOrEqual(loggedEntry.DurationMS, int64(0))
 }

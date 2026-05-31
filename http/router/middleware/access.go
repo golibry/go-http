@@ -1,12 +1,10 @@
 package middleware
 
 import (
-	"fmt"
 	httpInternal "github.com/golibry/go-http/http"
 	"log/slog"
 	"net"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -43,9 +41,9 @@ func NewHTTPAccessLogger(
 
 func (accessLogger *HTTPAccessLogger) ServeHTTP(rw http.ResponseWriter, rq *http.Request) {
 	logResponseWriter := httpInternal.NewResponseWriter(rw)
-	timeBeforeServe := time.Now().UnixMilli()
+	timeBeforeServe := time.Now()
 	accessLogger.next.ServeHTTP(logResponseWriter, rq)
-	timeAfterServe := time.Now().UnixMilli()
+	duration := time.Since(timeBeforeServe)
 
 	var entries []slog.Attr
 
@@ -53,24 +51,21 @@ func (accessLogger *HTTPAccessLogger) ServeHTTP(rw http.ResponseWriter, rq *http
 		clientIP := extractClientIP(rq.RemoteAddr)
 		entries = append(
 			entries,
-			slog.String("Client IP", clientIP),
+			slog.String("client_ip", clientIP),
 		)
 	}
 
 	entries = append(
 		entries, []slog.Attr{
-			slog.String("Method", rq.Method),
-			slog.String("Host", rq.Host),
-			slog.String("Path", rq.URL.Path),
-			slog.String("Query", rq.URL.RawQuery),
-			slog.String("Protocol", rq.Proto),
-			slog.String("User Agent", rq.UserAgent()),
-			slog.String("Response Status Code", strconv.Itoa(logResponseWriter.StatusCode())),
-			slog.Int("Response Bytes", logResponseWriter.BytesWritten()),
-			slog.String(
-				"Duration (s)",
-				fmt.Sprintf("%.2f", float64(timeAfterServe-timeBeforeServe)/1000),
-			),
+			slog.String("method", rq.Method),
+			slog.String("host", rq.Host),
+			slog.String("path", rq.URL.Path),
+			slog.String("query", rq.URL.RawQuery),
+			slog.String("protocol", rq.Proto),
+			slog.String("user_agent", rq.UserAgent()),
+			slog.Int("status", logResponseWriter.StatusCode()),
+			slog.Int("bytes", logResponseWriter.BytesWritten()),
+			slog.Int64("duration_ms", duration.Milliseconds()),
 		}...,
 	)
 

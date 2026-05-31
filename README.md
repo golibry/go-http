@@ -15,7 +15,7 @@ Migrated from https://github.com/rsgcata/go-http
   - Safe 5xx error responses by default, with opt-in internal message exposure
   - Optional structured logging with context
 - Middleware
-  - Access logging, panic recovery, buffered timeouts, path normalization, CSRF protection, session management
+  - Access logging with machine-friendly keys, panic recovery, buffered timeouts, path normalization, CSRF protection, session management
 - Router utilities
   - Named middleware chaining with declaration-order execution and per-route overrides
 - Sessions
