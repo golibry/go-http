@@ -49,7 +49,32 @@ func (suite *ResponseSuite) TestResponseWriterCanCacheStatusCode() {
 	responseWriter := NewResponseWriter(baseResponseWriter)
 	responseWriter.WriteHeader(expectedCode)
 	suite.Assert().Equal(expectedCode, baseResponseWriter.Code)
-	suite.Assert().Equal(expectedCode, responseWriter.statusCode)
+	suite.Assert().Equal(expectedCode, responseWriter.StatusCode())
+	suite.Assert().True(responseWriter.Written())
+}
+
+func (suite *ResponseSuite) TestResponseWriterTracksImplicitStatusAndBytesWritten() {
+	baseResponseWriter := httptest.NewRecorder()
+	responseWriter := NewResponseWriter(baseResponseWriter)
+
+	bytesWritten, err := responseWriter.Write([]byte("hello"))
+
+	suite.Assert().NoError(err)
+	suite.Assert().Equal(5, bytesWritten)
+	suite.Assert().Equal(http.StatusOK, responseWriter.StatusCode())
+	suite.Assert().Equal(5, responseWriter.BytesWritten())
+	suite.Assert().True(responseWriter.Written())
+}
+
+func (suite *ResponseSuite) TestResponseWriterIgnoresLateWriteHeader() {
+	baseResponseWriter := httptest.NewRecorder()
+	responseWriter := NewResponseWriter(baseResponseWriter)
+
+	responseWriter.WriteHeader(http.StatusCreated)
+	responseWriter.WriteHeader(http.StatusInternalServerError)
+
+	suite.Assert().Equal(http.StatusCreated, responseWriter.StatusCode())
+	suite.Assert().Equal(http.StatusCreated, baseResponseWriter.Code)
 }
 
 func (suite *ResponseSuite) TestItCanBuildJSONResponse() {
@@ -171,8 +196,23 @@ func (suite *ResponseSuite) TestItCanBuildJSONErrorResponse() {
 	var result map[string]interface{}
 	err = json.Unmarshal(recorder.Body.Bytes(), &result)
 	suite.Assert().NoError(err)
-	suite.Assert().Equal("json error occurred", result["error"])
+	suite.Assert().Equal("Internal Server Error", result["error"])
 	suite.Assert().Equal(float64(500), result["status"])
+}
+
+func (suite *ResponseSuite) TestItCanExposeInternalErrorMessageWhenEnabled() {
+	recorder := httptest.NewRecorder()
+	testError := errors.New("debug internal detail")
+
+	err := NewResponseBuilder(recorder).
+		Error().
+		WithError(testError).
+		ExposeErrorMessage(true).
+		Send()
+
+	suite.Assert().NoError(err)
+	suite.Assert().Equal(http.StatusInternalServerError, recorder.Code)
+	suite.Assert().Equal("debug internal detail", recorder.Body.String())
 }
 
 func (suite *ResponseSuite) TestItCanBuildErrorResponseWithCustomMessage() {
@@ -296,7 +336,7 @@ func (suite *ResponseSuite) TestItCanHandleErrorCategoriesWithSentinelErrors() {
 
 	suite.Assert().NoError(err)
 	suite.Assert().Equal(http.StatusServiceUnavailable, recorder.Code)
-	suite.Assert().Equal("database connection failed", recorder.Body.String())
+	suite.Assert().Equal("Service Unavailable", recorder.Body.String())
 }
 
 func (suite *ResponseSuite) TestItCanLogErrorsWithStructuredLogger() {
@@ -316,7 +356,7 @@ func (suite *ResponseSuite) TestItCanLogErrorsWithStructuredLogger() {
 
 	suite.Assert().NoError(err)
 	suite.Assert().Equal(http.StatusInternalServerError, recorder.Code)
-	suite.Assert().Equal("logged error", recorder.Body.String())
+	suite.Assert().Equal("Internal Server Error", recorder.Body.String())
 
 	// Check that error was logged
 	logOutput := logBuffer.String()

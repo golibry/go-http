@@ -11,38 +11,35 @@ type NamedMiddleware struct {
 }
 
 // WithNamedMiddlewares applies named middlewares with selective override capability
+// Middlewares execute in the same order they appear in namedMiddlewares.
+// Overrides replace matching default middlewares by name. Overrides with new
+// names are appended after the defaults and execute in their provided order.
 func WithNamedMiddlewares(
 	handler http.Handler,
 	namedMiddlewares []NamedMiddleware,
 	overrides []NamedMiddleware,
 ) http.Handler {
-	// Create a map of override middleware names to functions for a quick lookup
 	overrideMap := make(map[string]func(http.Handler) http.Handler)
-
-	// Add override middlewares to the map
 	if overrides != nil {
 		for _, override := range overrides {
 			overrideMap[override.Name] = override.Middleware
 		}
 	}
 
-	// Apply middlewares in the order they appear in namedMiddlewares
-	// This preserves the intended middleware chain order
+	resolvedMiddlewares := make([]NamedMiddleware, 0, len(namedMiddlewares)+len(overrides))
 	for _, namedMw := range namedMiddlewares {
 		if overrideMiddleware, exists := overrideMap[namedMw.Name]; exists {
-			// Use override middleware if available
-			handler = overrideMiddleware(handler)
+			resolvedMiddlewares = append(resolvedMiddlewares, NamedMiddleware{
+				Name:       namedMw.Name,
+				Middleware: overrideMiddleware,
+			})
 		} else {
-			// Use original middleware
-			handler = namedMw.Middleware(handler)
+			resolvedMiddlewares = append(resolvedMiddlewares, namedMw)
 		}
 	}
 
-	// Apply any additional middlewares from overrides that weren't in the original list
-	// This maintains ordering for leftover overrides
 	if overrides != nil {
 		for _, override := range overrides {
-			// Check if this middleware name was not in the original list
 			found := false
 			for _, namedMw := range namedMiddlewares {
 				if namedMw.Name == override.Name {
@@ -51,9 +48,13 @@ func WithNamedMiddlewares(
 				}
 			}
 			if !found {
-				handler = override.Middleware(handler)
+				resolvedMiddlewares = append(resolvedMiddlewares, override)
 			}
 		}
+	}
+
+	for i := len(resolvedMiddlewares) - 1; i >= 0; i-- {
+		handler = resolvedMiddlewares[i].Middleware(handler)
 	}
 
 	return handler

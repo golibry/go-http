@@ -9,14 +9,15 @@ Migrated from https://github.com/rsgcata/go-http
 
 - Response utilities
   - ResponseBuilder for JSON, text, and HTML
-  - Enhanced ResponseWriter that tracks status codes
+  - Enhanced ResponseWriter that tracks status codes, write state, and bytes written
 - Error handling
   - `HTTPError` interface and error categories
+  - Safe 5xx error responses by default, with opt-in internal message exposure
   - Optional structured logging with context
 - Middleware
   - Access logging, panic recovery, buffered timeouts, path normalization, CSRF protection, session management
 - Router utilities
-  - Named middleware chaining with per-route overrides
+  - Named middleware chaining with declaration-order execution and per-route overrides
 - Sessions
   - Manager, middleware integration, memory/MySQL/PostgreSQL/Redis storage, flashes, GC lifecycle
 

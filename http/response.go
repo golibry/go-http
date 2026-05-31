@@ -74,20 +74,45 @@ func AddErrorType[T error](ec *ErrorCategory) {
 
 type ResponseWriter struct {
 	http.ResponseWriter
-	statusCode int
+	statusCode   int
+	bytesWritten int
+	written      bool
 }
 
 func NewResponseWriter(w http.ResponseWriter) *ResponseWriter {
-	return &ResponseWriter{w, http.StatusOK}
+	return &ResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 }
 
 func (rw *ResponseWriter) WriteHeader(code int) {
+	if rw.written {
+		return
+	}
+
 	rw.statusCode = code
+	rw.written = true
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *ResponseWriter) Write(data []byte) (int, error) {
+	if !rw.written {
+		rw.WriteHeader(http.StatusOK)
+	}
+
+	bytesWritten, err := rw.ResponseWriter.Write(data)
+	rw.bytesWritten += bytesWritten
+	return bytesWritten, err
 }
 
 func (rw *ResponseWriter) StatusCode() int {
 	return rw.statusCode
+}
+
+func (rw *ResponseWriter) BytesWritten() int {
+	return rw.bytesWritten
+}
+
+func (rw *ResponseWriter) Written() bool {
+	return rw.written
 }
 
 // ResponseBuilder provides a base structure for building HTTP responses
@@ -204,12 +229,13 @@ func (rb *ResponseBuilder) HTML() *HTMLResponseBuilder {
 // ErrorResponseBuilder builds error responses with advanced error handling capabilities
 type ErrorResponseBuilder struct {
 	*ResponseBuilder
-	err        error
-	message    string
-	isJSON     bool
-	ctx        context.Context
-	logger     *slog.Logger
-	categories []*ErrorCategory
+	err                error
+	message            string
+	isJSON             bool
+	exposeErrorMessage bool
+	ctx                context.Context
+	logger             *slog.Logger
+	categories         []*ErrorCategory
 }
 
 // Error creates a new error response builder
@@ -230,6 +256,12 @@ func (erb *ErrorResponseBuilder) WithError(err error) *ErrorResponseBuilder {
 // WithMessage sets a custom error message
 func (erb *ErrorResponseBuilder) WithMessage(message string) *ErrorResponseBuilder {
 	erb.message = message
+	return erb
+}
+
+// ExposeErrorMessage controls whether err.Error() can be sent to clients for 5xx responses.
+func (erb *ErrorResponseBuilder) ExposeErrorMessage(expose bool) *ErrorResponseBuilder {
+	erb.exposeErrorMessage = expose
 	return erb
 }
 
@@ -334,7 +366,7 @@ func (erb *ErrorResponseBuilder) Send() error {
 
 	// Determine the message to send
 	message := erb.message
-	if message == "" && erb.err != nil {
+	if message == "" && erb.err != nil && erb.shouldExposeErrorMessage(statusCode) {
 		message = erb.err.Error()
 	}
 	if message == "" {
@@ -353,4 +385,8 @@ func (erb *ErrorResponseBuilder) Send() error {
 	erb.writeHeaders()
 	_, err := erb.writer.Write([]byte(message))
 	return err
+}
+
+func (erb *ErrorResponseBuilder) shouldExposeErrorMessage(statusCode int) bool {
+	return erb.exposeErrorMessage || statusCode < http.StatusInternalServerError
 }

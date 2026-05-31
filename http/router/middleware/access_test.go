@@ -30,6 +30,7 @@ type accessLog struct {
 	Protocol  string `json:"Protocol"`
 	UserAgent string `json:"User Agent"`
 	Code      string `json:"Response Status Code"`
+	Bytes     int    `json:"Response Bytes"`
 }
 
 func (suite *AccessSuite) TestItCanLogAccessDetails() {
@@ -55,6 +56,7 @@ func (suite *AccessSuite) TestItCanLogAccessDetails() {
 		http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(expectedCode)
+				_, _ = w.Write([]byte("hello"))
 			},
 		),
 		logger,
@@ -79,4 +81,5 @@ func (suite *AccessSuite) TestItCanLogAccessDetails() {
 	suite.Assert().Equal(expectedProtocol, loggedEntry.Protocol)
 	suite.Assert().Equal(expectedUserAgent, loggedEntry.UserAgent)
 	suite.Assert().Equal(strconv.Itoa(expectedCode), loggedEntry.Code)
+	suite.Assert().Equal(5, loggedEntry.Bytes)
 }

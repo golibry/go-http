@@ -66,6 +66,7 @@ func (accessLogger *HTTPAccessLogger) ServeHTTP(rw http.ResponseWriter, rq *http
 			slog.String("Protocol", rq.Proto),
 			slog.String("User Agent", rq.UserAgent()),
 			slog.String("Response Status Code", strconv.Itoa(logResponseWriter.StatusCode())),
+			slog.Int("Response Bytes", logResponseWriter.BytesWritten()),
 			slog.String(
 				"Duration (s)",
 				fmt.Sprintf("%.2f", float64(timeAfterServe-timeBeforeServe)/1000),
